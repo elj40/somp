@@ -19,6 +19,19 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 
+#define MAX_POLYNOMIAL_DEGREE 10
+
+
+struct Polynomial {
+	float start;
+	float end;
+ 	// Position in array determines power of x
+	// => [3,2,4,0,1] = 3 + 2x + 4x^2 + x^4
+	float coefficients[MAX_POLYNOMIAL_DEGREE];
+};
+
+typedef struct Polynomial Polynomial;
+
 void handleEvents(SDL_Window * pWin, SDL_Renderer * pRend);
 
 void render(SDL_Window * pWin, SDL_Renderer * pRend);
@@ -30,6 +43,7 @@ float calculateStress(float x, float x1, float force1, float x2, float force2, f
 float calculateStressDiscrete(float x, float distances[], float forces[], int forceCount);
 float calculateStressXLinear(float x, float polyEnd);
 float calculateStressXSquared(float x, float polyEnd);
+float calculateStressPolynomial(float x, Polynomial poly);
 
 SDL_Color colorFromStress(float stress, float maxStress);
 
@@ -47,18 +61,29 @@ int main(int argc, char * argv[])
 {
 	printf("Hello world!\n");
 
-	float forces[] = { 1, 1, 1, 1 };
+	/* float forces[] = { 1, 1, 1, 1 }; */
 	float distances[] = { 1, 2, 3, 4};
 
 	for (int i = 0; i < 4; i++)
 	{
 		float stress = calculateStressXLinear(i, distances[3]);
-		stress += calculateStressDiscrete(i, distances, forces, 4);
 		printf("V(%f) = %f\n", (float)i, stress);
 	}
 
+	Polynomial linear = {0};
+	linear.start = 0;
+	linear.end = 4;
+	linear.coefficients[1] = 1;
+
+	printf("\n");
+	for (int i = 0; i < 4; i++)
+	{
+		float stress = calculateStressPolynomial( (float) i, linear);
+		printf("V(%f) = %f\n", (float)i, stress);
+	}
 
 #if 0
+
 	SDL_Init(SDL_INIT_VIDEO);
 	
 	SDL_Window * pWindow = SDL_CreateWindow("SOMP", 0, 200, windowWidth, windowHeight, SDL_WINDOW_RESIZABLE);
@@ -89,10 +114,19 @@ int main(int argc, char * argv[])
 	SDL_DestroyWindow(pWindow);
 
 	SDL_Quit();
+
 #endif
 	return 0;
 }
 
+void integratePolynomial(float integral[MAX_POLYNOMIAL_DEGREE], float poly[MAX_POLYNOMIAL_DEGREE])
+{
+	for (int i = 0; i < MAX_POLYNOMIAL_DEGREE-1; i++)
+	{
+		integral[i+1] = (1.0 / (i+1)) * poly[i];
+		/* printf("%d: %f\n", i, (1.0 / (i+1)) * poly[i]); */
+	}
+}
 
 float calculateStressXLinear(float x, float polyEnd)
 {
@@ -102,6 +136,48 @@ float calculateStressXLinear(float x, float polyEnd)
 float calculateStressXSquared(float x, float polyEnd)
 {
 	return 1.0 / 3.0 * (pow(polyEnd, 3) - pow(x,3));
+}
+
+void printFullPolynomial(float w[MAX_POLYNOMIAL_DEGREE])
+{
+	for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
+	{
+		printf("%.2fx^%d", w[i], i);
+		if (i < MAX_POLYNOMIAL_DEGREE-1) printf(" + ");
+	}
+	printf("\n");
+}
+
+float calculateStressPolynomial(float x, Polynomial poly)
+{
+	float V[MAX_POLYNOMIAL_DEGREE] = {0}; 
+	integratePolynomial(V, poly.coefficients);
+
+	printf("w:  ");
+	printFullPolynomial(poly.coefficients);
+	printf("V:  ");
+	printFullPolynomial(V);
+
+	// ---x---s---x----e-----x
+	if (x > poly.end) return 0;
+	else if (poly.start <= x && x <= poly.end)
+	{
+		float stress = 0;
+		for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
+		{
+			stress += V[i]*pow(poly.end, i) - V[i]*pow(x, i);
+		}
+		return stress;
+	} else
+	{
+		float stress = 0;
+		for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
+		{
+			stress += V[i]*pow(poly.end, i) - V[i]*pow(poly.start, i);
+		}
+		return stress;
+	}
+	
 }
 
 float calculateStressDiscrete(float x, float distances[], float forces[], int forceCount)
@@ -184,7 +260,7 @@ void render(SDL_Window * pWin, SDL_Renderer * pRend)
 	static int f = 0;
 	f += 10;
 
-	renderBeam(pRend, beamRect, f, 100);
+	renderBeam(pRend, beamRect, f, 30);
 
 	SDL_SetRenderDrawColor(pRend, 255, 255, 255, 255);
 	SDL_RenderDrawRect(pRend, &beamRect);

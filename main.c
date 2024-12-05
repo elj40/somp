@@ -32,6 +32,9 @@ struct Polynomial {
 
 typedef struct Polynomial Polynomial;
 
+void printPolynomial(float w[MAX_POLYNOMIAL_DEGREE]);
+void printFullPolynomial(float w[MAX_POLYNOMIAL_DEGREE]);
+
 void handleEvents(SDL_Window * pWin, SDL_Renderer * pRend);
 
 void render(SDL_Window * pWin, SDL_Renderer * pRend);
@@ -138,6 +141,19 @@ float calculateStressXSquared(float x, float polyEnd)
 	return 1.0 / 3.0 * (pow(polyEnd, 3) - pow(x,3));
 }
 
+void printPolynomial(float w[MAX_POLYNOMIAL_DEGREE])
+{
+	for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
+	{
+		if (w[i] != 0.0) 
+		{
+			printf("%.2fx^%d", w[i], i);
+			if (i < MAX_POLYNOMIAL_DEGREE-1) printf(" + ");
+		}
+	}
+	printf("\n");
+}
+
 void printFullPolynomial(float w[MAX_POLYNOMIAL_DEGREE])
 {
 	for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
@@ -154,9 +170,9 @@ float calculateStressPolynomial(float x, Polynomial poly)
 	integratePolynomial(V, poly.coefficients);
 
 	printf("w:  ");
-	printFullPolynomial(poly.coefficients);
+	printPolynomial(poly.coefficients);
 	printf("V:  ");
-	printFullPolynomial(V);
+	printPolynomial(V);
 
 	// ---x---s---x----e-----x
 	if (x > poly.end) return 0;

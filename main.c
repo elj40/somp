@@ -44,8 +44,6 @@ void renderArrow(SDL_Renderer * pRend, SDL_Color color, int startX, int startY, 
 
 float calculateStress(float x, float x1, float force1, float x2, float force2, float x3, float force3);
 float calculateStressDiscrete(float x, float distances[], float forces[], int forceCount);
-float calculateStressXLinear(float x, float polyEnd);
-float calculateStressXSquared(float x, float polyEnd);
 float calculateStressPolynomial(float x, Polynomial poly);
 float calculateStressPolynomials(float x, Polynomial polys[], int polyCount);
 
@@ -118,11 +116,11 @@ int main(int argc, char * argv[])
 	return 0;
 }
 
-void integratePolynomial(float integral[MAX_POLYNOMIAL_DEGREE], float poly[MAX_POLYNOMIAL_DEGREE])
+void integratePolynomial(Polynomial * integral, Polynomial * poly)
 {
 	for (int i = 0; i < MAX_POLYNOMIAL_DEGREE-1; i++)
 	{
-		integral[i+1] = (1.0 / (i+1)) * poly[i];
+		integral->coefficients[i+1] = (1.0 / (i+1)) * poly->coefficients[i];
 	}
 }
 
@@ -161,28 +159,32 @@ float calculateStressPolynomials(float x, Polynomial polys[], int polyCount)
 	return totalStress;
 };
 
+float calculatePolynomial(float x, Polynomial p)
+{
+		float value = 0;
+		for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
+		{
+			value += p.coefficients[i]*pow(x, i);
+		}
+		return value;
+}
+
 float calculateStressPolynomial(float x, Polynomial poly)
 {
-	float V[MAX_POLYNOMIAL_DEGREE] = {0}; 
-	integratePolynomial(V, poly.coefficients);
 
+	Polynomial integral = { poly.start, poly.end };
+	integratePolynomial(&integral, &poly);
+
+	// Force could be before, inside or after range
 	// ---x---s---x----e-----x
 	if (x > poly.end) return 0;
 	else if (poly.start <= x && x <= poly.end)
 	{
-		float stress = 0;
-		for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
-		{
-			stress += V[i]*pow(poly.end, i) - V[i]*pow(x, i);
-		}
+		float stress = calculatePolynomial(poly.end, integral) - calculatePolynomial(x, integral);
 		return stress;
 	} else
 	{
-		float stress = 0;
-		for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
-		{
-			stress += V[i]*pow(poly.end, i) - V[i]*pow(poly.start, i);
-		}
+		float stress = calculatePolynomial(poly.end, integral) - calculatePolynomial(poly.start, integral);
 		return stress;
 	}
 	
@@ -217,38 +219,6 @@ float calculateStressDiscrete(float x, float distances[], float forces[], int fo
 	return stress;
 }
 
-float calculateStress(float x, float x1, float force1, float x2, float force2, float x3, float force3)
-{
-	// Global sum of Fy = 0
-	// => Fwall = force1 + force2 + force3
-	//
-	// Section1 sum Fy = 0
-	// => Fwall - V1 = 0
-	// => v1 = force1 + force2 + force3
-	//
-	// Section2 sum Fy = 0
-	// => Fwall - force1 - V2 = 0
-	// => v2 = force2 + force3
-	//
-	// Section3 sum Fy = 0
-	// => Fwall - force1 - force2 - v3 = 0
-	// => v3 = force3
-	
-	if ( 0 <= x && x <= x1)
-	{
-		return force1 + force2 + force3;
-	} 
-	else if ( x1 < x && x <= x2 )
-	{
-		return force2 + force3;
-	}
-	else if ( x2 < x && x <= x3 )
-	{
-		return force3;
-	}
-
-	return 0;
-}
 void render(SDL_Window * pWin, SDL_Renderer * pRend)
 {
 	SDL_SetRenderDrawColor(pRend, 20, 20, 20, 255);
@@ -317,6 +287,7 @@ void renderBeam(SDL_Renderer * pRend, SDL_Rect beam, int resolution)
 
 	SDL_Rect rect;
 
+#if 0
 	for (int i = 0; i < n; i++)
 	{
 		rect.x = (n == 0) ? 0 : beam.x + distances[i-1];
@@ -340,10 +311,27 @@ void renderBeam(SDL_Renderer * pRend, SDL_Rect beam, int resolution)
 		SDL_RenderFillRect(pRend, &rect);
 	}
 
-	rect.x = beam.x+distances[n-1];
-	rect.w = beam.x + beam.w - rect.x;
+#endif
 
-	assert(rect.w >= 0);
+	//render linear poly
+	Polynomial linear = { 0, beam.w };
+	linear.coefficients[1] = 10.0/beam.w;
+
+	Polynomial constant = { 100, beam.w };
+	constant.coefficients[0] = 8;
+
+	Polynomial polys[] = {constant, linear};
+
+	float maxStress = calculateStressPolynomials(0.0, polys, 2);
+	for (int x = 1; x <= beam.w; x++)
+	{
+		float beamStress = calculateStressPolynomials((float) x, polys, 2);
+
+		SDL_Color color = colorFromStress(beamStress, maxStress);
+		SDL_SetRenderDrawColor(pRend, color.r, color.g, color.b, color.a);
+		SDL_RenderDrawLine(pRend, beam.x+x, beam.y, beam.x+x, beam.y+beam.h);
+	}
+
 
 	SDL_SetRenderDrawColor(pRend, 0, 0, 0, 255);
 	SDL_RenderFillRect(pRend, &rect);

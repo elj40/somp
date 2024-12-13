@@ -6,7 +6,9 @@ The project will be done in SDL to make it a learning process, maybe it will be 
 
 ## Rendering
 
-* Dont want to calculate stress for every single pixel, tends to be inaccurate and takes a lot of computation
+* Should probably seperate rendering arrows, graphs and beam stress gradient
+* Dont want to calculate stress for every single pixel, tends to be inaccurate
+  and takes a lot of computation but its the easiest so im gonna do it
 * Rendering chunks based off functions seems better but more complicated and
   still needs to calculate for every pixel in function but can do chunks for
   point forces (probably most common)

@@ -10,11 +10,12 @@
 * We wont support overalapping forces for now either
 *
 * It seems that we have to consider point forces and functions seperately,
-* otherwise how do we represent a point force as a polynomial?
+* otherwise how do we represent a point force as a polynomial/function?
 * Represent polynomials as arrays?
 */
 
 #include <stdio.h>
+#include <assert.h>
 #include <math.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
@@ -40,13 +41,13 @@ void handleEvents(SDL_Window * pWin, SDL_Renderer * pRend);
 void render(SDL_Window * pWin, SDL_Renderer * pRend);
 void renderTriangle(SDL_Renderer * pRend, SDL_Color color, int x1, int y1,int x2, int y2,int x3, int y3);
 void renderArrow(SDL_Renderer * pRend, SDL_Color color, int startX, int startY, int endX, int endY, int tipLength, int tipWidth);
-void renderBeam(SDL_Renderer * pRend, SDL_Rect beam, float force, int resolution);
 
 float calculateStress(float x, float x1, float force1, float x2, float force2, float x3, float force3);
 float calculateStressDiscrete(float x, float distances[], float forces[], int forceCount);
 float calculateStressXLinear(float x, float polyEnd);
 float calculateStressXSquared(float x, float polyEnd);
 float calculateStressPolynomial(float x, Polynomial poly);
+float calculateStressPolynomials(float x, Polynomial polys[], int polyCount);
 
 SDL_Color colorFromStress(float stress, float maxStress);
 
@@ -65,27 +66,23 @@ int main(int argc, char * argv[])
 	printf("Hello world!\n");
 
 	/* float forces[] = { 1, 1, 1, 1 }; */
-	float distances[] = { 1, 2, 3, 4};
+	/* float distances[] = { 1, 2, 3, 4}; */
 
-	for (int i = 0; i < 4; i++)
-	{
-		float stress = calculateStressXLinear(i, distances[3]);
-		printf("V(%f) = %f\n", (float)i, stress);
-	}
+	Polynomial squared = {0};
+	squared.start = 0;
+	squared.end = 4;
+	squared.coefficients[2] = 1;
 
-	Polynomial linear = {0};
-	linear.start = 0;
-	linear.end = 4;
-	linear.coefficients[1] = 1;
+	/* Polynomial polynomials[2] = { squared, (Polynomial){0} }; */
+	Polynomial polynomials[2] = { squared, squared };
 
 	printf("\n");
-	for (int i = 0; i < 4; i++)
+	for (int i = 0; i < squared.end; i++)
 	{
-		float stress = calculateStressPolynomial( (float) i, linear);
+		float stress = calculateStressPolynomials( (float) i, polynomials, 2);
 		printf("V(%f) = %f\n", (float)i, stress);
 	}
 
-#if 0
 
 	SDL_Init(SDL_INIT_VIDEO);
 	
@@ -118,7 +115,6 @@ int main(int argc, char * argv[])
 
 	SDL_Quit();
 
-#endif
 	return 0;
 }
 
@@ -127,19 +123,9 @@ void integratePolynomial(float integral[MAX_POLYNOMIAL_DEGREE], float poly[MAX_P
 	for (int i = 0; i < MAX_POLYNOMIAL_DEGREE-1; i++)
 	{
 		integral[i+1] = (1.0 / (i+1)) * poly[i];
-		/* printf("%d: %f\n", i, (1.0 / (i+1)) * poly[i]); */
 	}
 }
 
-float calculateStressXLinear(float x, float polyEnd)
-{
-	return 1.0 / 2.0 * (pow(polyEnd, 2) - pow(x,2));
-}
-
-float calculateStressXSquared(float x, float polyEnd)
-{
-	return 1.0 / 3.0 * (pow(polyEnd, 3) - pow(x,3));
-}
 
 void printPolynomial(float w[MAX_POLYNOMIAL_DEGREE])
 {
@@ -147,8 +133,8 @@ void printPolynomial(float w[MAX_POLYNOMIAL_DEGREE])
 	{
 		if (w[i] != 0.0) 
 		{
+			if (i != 0) printf(" + ");
 			printf("%.2fx^%d", w[i], i);
-			if (i < MAX_POLYNOMIAL_DEGREE-1) printf(" + ");
 		}
 	}
 	printf("\n");
@@ -164,15 +150,21 @@ void printFullPolynomial(float w[MAX_POLYNOMIAL_DEGREE])
 	printf("\n");
 }
 
+float calculateStressPolynomials(float x, Polynomial polys[], int polyCount)
+{
+	float totalStress = 0;
+	for (int i = 0; i < polyCount; i++)
+	{
+		totalStress += calculateStressPolynomial(x, polys[i]);
+	}
+
+	return totalStress;
+};
+
 float calculateStressPolynomial(float x, Polynomial poly)
 {
 	float V[MAX_POLYNOMIAL_DEGREE] = {0}; 
 	integratePolynomial(V, poly.coefficients);
-
-	printf("w:  ");
-	printPolynomial(poly.coefficients);
-	printf("V:  ");
-	printPolynomial(V);
 
 	// ---x---s---x----e-----x
 	if (x > poly.end) return 0;
@@ -273,10 +265,7 @@ void render(SDL_Window * pWin, SDL_Renderer * pRend)
 	int beamW = 0.5 * windowWidth;
 	SDL_Rect beamRect = { beamX, beamY, beamW, beamThickness};
 
-	static int f = 0;
-	f += 10;
-
-	renderBeam(pRend, beamRect, f, 30);
+	renderBeam(pRend, beamRect, 20);
 
 	SDL_SetRenderDrawColor(pRend, 255, 255, 255, 255);
 	SDL_RenderDrawRect(pRend, &beamRect);
@@ -319,29 +308,31 @@ SDL_Color colorFromStress(float stress, float maxStress)
 	return c;
 }
 
-void renderBeam(SDL_Renderer * pRend, SDL_Rect beam, float force, int resolution)
+void renderBeam(SDL_Renderer * pRend, SDL_Rect beam, int resolution)
 {
-	int stepWidth = beam.w / resolution;
+	float forces[3] = { 1, 2, 5 };
+	float distances[3] = { 100, 200, beam.w - 50 }; 
+
+	int n = sizeof(forces)/sizeof(float);
 
 	SDL_Rect rect;
 
-	for (int i = 0; i < resolution; i++)
+	for (int i = 0; i < n; i++)
 	{
-		rect.x = beam.x + stepWidth*i;
+		rect.x = (n == 0) ? 0 : beam.x + distances[i-1];
 		rect.y = beam.y;
-		rect.w = stepWidth;
 		rect.h = beam.h;
 
-		float x1 = beam.w * 0.25, f1 = 5;
-		float x2 = beam.w * 0.33, f2 = 2;
-		float x3 = beam.w * 0.75, f3 = 2;
-		float beamStress = calculateStress(stepWidth*i, x1, f1, x2, f2, x3, f3);
+		if (n == 0) rect.w = distances[0];
+		else rect.w = distances[i]-distances[i-1];
+
+		float beamStress = calculateStressDiscrete(distances[i], distances, forces, 3);
 		int maxStress = 10;
 
 		SDL_Color color = colorFromStress(beamStress, maxStress);
 
-		int ax = beam.x + stepWidth * (i+1);
-		int asy = beam.y - (beamStress/maxStress) * (windowHeight * 0.33);
+		int ax = rect.x + rect.w;
+		int asy = beam.y - (forces[i]/5) * (beam.y - windowHeight / 4);
 		int aey = beam.y;
 		renderArrow(pRend, WHITE, ax, asy, ax, aey, 10, 6);
 
@@ -349,7 +340,15 @@ void renderBeam(SDL_Renderer * pRend, SDL_Rect beam, float force, int resolution
 		SDL_RenderFillRect(pRend, &rect);
 	}
 
-	globalPauseUpdate = 1;
+	rect.x = beam.x+distances[n-1];
+	rect.w = beam.x + beam.w - rect.x;
+
+	assert(rect.w >= 0);
+
+	SDL_SetRenderDrawColor(pRend, 0, 0, 0, 255);
+	SDL_RenderFillRect(pRend, &rect);
+
+	globalPauseUpdate = 1; // stop after every render so we dont consume too much cpu
 
 }
 
@@ -385,8 +384,8 @@ void renderArrow(SDL_Renderer * pRend, SDL_Color color, int startX, int startY, 
 	float l = arrow_length;
 
 	float d = sqrt((l-a)*(l-a)+b*b);
-	float psi = atan2(dy, dx);
-	float theta = atan2(b, l-a);
+	double psi = atan2(dy, dx);
+	double theta = atan2(b, l-a);
 
 	float px1 = d*cos(psi-theta);
 	float py1 = d*sin(psi-theta);

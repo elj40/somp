@@ -12,6 +12,9 @@
 * It seems that we have to consider point forces and functions seperately,
 * otherwise how do we represent a point force as a polynomial/function?
 * Represent polynomials as arrays?
+*
+* 14/12/2024: try and render all the graphs and arrows and stuff
+* TODO: learn how to hot reload
 */
 
 #include <stdio.h>
@@ -20,8 +23,16 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 
+#include "utils.c" //TODO, make sure this c file doesnt cause issues
+
 #define MAX_POLYNOMIAL_DEGREE 10
 
+struct Beam {
+	float length;
+	SDL_Rect screenRect;
+};
+
+typedef struct Beam Beam;
 
 struct Polynomial {
 	float start;
@@ -61,27 +72,6 @@ int globalPauseUpdate = 0;
 
 int main(int argc, char * argv[]) 
 {
-	printf("Hello world!\n");
-
-	/* float forces[] = { 1, 1, 1, 1 }; */
-	/* float distances[] = { 1, 2, 3, 4}; */
-
-	Polynomial squared = {0};
-	squared.start = 0;
-	squared.end = 4;
-	squared.coefficients[2] = 1;
-
-	/* Polynomial polynomials[2] = { squared, (Polynomial){0} }; */
-	Polynomial polynomials[2] = { squared, squared };
-
-	printf("\n");
-	for (int i = 0; i < squared.end; i++)
-	{
-		float stress = calculateStressPolynomials( (float) i, polynomials, 2);
-		printf("V(%f) = %f\n", (float)i, stress);
-	}
-
-
 	SDL_Init(SDL_INIT_VIDEO);
 	
 	SDL_Window * pWindow = SDL_CreateWindow("SOMP", 0, 200, windowWidth, windowHeight, SDL_WINDOW_RESIZABLE);
@@ -101,7 +91,14 @@ int main(int argc, char * argv[])
 
 		if (!globalPauseUpdate)
 		{
-			render(pWindow, pRenderer);
+			SDL_SetRenderDrawColor(pRenderer, 20, 20, 20, 255);
+			SDL_RenderClear(pRenderer);
+
+			SDL_Rect target = {0, 0, windowWidth, windowHeight};
+
+			renderBeamArea(pRenderer, target);
+
+			SDL_RenderPresent(pRenderer);
 		}
 
 		endTime = SDL_GetPerformanceCounter();
@@ -200,7 +197,7 @@ float calculateStressDiscrete(float x, float distances[], float forces[], int fo
 	// => v1 = force1 + force2 + force3
 	//
 	// Section2 sum Fy = 0
-	// => Fwall - force1 - V2 = 0
+	// => Fwall - force1 - V2 = /
 	// => v2 = force2 + force3
 	//
 	// Section3 sum Fy = 0
@@ -217,31 +214,6 @@ float calculateStressDiscrete(float x, float distances[], float forces[], int fo
 	}
 
 	return stress;
-}
-
-void render(SDL_Window * pWin, SDL_Renderer * pRend)
-{
-	SDL_SetRenderDrawColor(pRend, 20, 20, 20, 255);
-	SDL_RenderClear(pRend);
-
-	//Draw wall
-	SDL_SetRenderDrawColor(pRend, 255, 255, 255, 255);
-	SDL_RenderDrawLine(pRend, (int) (0.25 * windowWidth), (int) (0.25 * windowHeight), (int) (0.25 * windowWidth), (int) (0.75 * windowHeight));
-
-	// Draw beam
-	int beamThickness = windowHeight * 0.1;
-	int beamX = 0.25 * windowWidth;
-	int beamY = 0.5 * windowHeight - beamThickness/2;
-	int beamW = 0.5 * windowWidth;
-	SDL_Rect beamRect = { beamX, beamY, beamW, beamThickness};
-
-	renderBeam(pRend, beamRect, 20);
-
-	SDL_SetRenderDrawColor(pRend, 255, 255, 255, 255);
-	SDL_RenderDrawRect(pRend, &beamRect);
-
-
-	SDL_RenderPresent(pRend);
 }
 
 void handleEvents(SDL_Window * pWin, SDL_Renderer * pRend)
@@ -278,66 +250,78 @@ SDL_Color colorFromStress(float stress, float maxStress)
 	return c;
 }
 
-void renderBeam(SDL_Renderer * pRend, SDL_Rect beam, int resolution)
+
+void renderBeamStress(SDL_Renderer * pRend, Beam beam, float forces[], float distances[], int forceCount, Polynomial polys[], int polyCount)
 {
-	float forces[3] = { 1, 2, 5 };
-	float distances[3] = { 100, 200, beam.w - 50 }; 
 
-	int n = sizeof(forces)/sizeof(float);
-
-	SDL_Rect rect;
-
-#if 0
-	for (int i = 0; i < n; i++)
+	// TODO: calculate everything in a seperate function then render it here (really? what advantages does this give us?)
+	float maxStress = calculateStressPolynomials(0.0, polys, polyCount);
+	for (int x = 1; x <= beam.screenRect.w; x++)
 	{
-		rect.x = (n == 0) ? 0 : beam.x + distances[i-1];
-		rect.y = beam.y;
-		rect.h = beam.h;
-
-		if (n == 0) rect.w = distances[0];
-		else rect.w = distances[i]-distances[i-1];
-
-		float beamStress = calculateStressDiscrete(distances[i], distances, forces, 3);
-		int maxStress = 10;
-
-		SDL_Color color = colorFromStress(beamStress, maxStress);
-
-		int ax = rect.x + rect.w;
-		int asy = beam.y - (forces[i]/5) * (beam.y - windowHeight / 4);
-		int aey = beam.y;
-		renderArrow(pRend, WHITE, ax, asy, ax, aey, 10, 6);
-
-		SDL_SetRenderDrawColor(pRend, color.r, color.g, color.b, color.a);
-		SDL_RenderFillRect(pRend, &rect);
-	}
-
-#endif
-
-	//render linear poly
-	Polynomial linear = { 0, beam.w };
-	linear.coefficients[1] = 10.0/beam.w;
-
-	Polynomial constant = { 100, beam.w };
-	constant.coefficients[0] = 8;
-
-	Polynomial polys[] = {constant, linear};
-
-	float maxStress = calculateStressPolynomials(0.0, polys, 2);
-	for (int x = 1; x <= beam.w; x++)
-	{
-		float beamStress = calculateStressPolynomials((float) x, polys, 2);
+		float beamStress = calculateStressPolynomials((float) x, polys, polyCount);
 
 		SDL_Color color = colorFromStress(beamStress, maxStress);
 		SDL_SetRenderDrawColor(pRend, color.r, color.g, color.b, color.a);
-		SDL_RenderDrawLine(pRend, beam.x+x, beam.y, beam.x+x, beam.y+beam.h);
+		SDL_RenderDrawLine(pRend, beam.screenRect.x+x, beam.screenRect.y, beam.screenRect.x+x, beam.screenRect.y+beam.screenRect.h);
 	}
-
-
-	SDL_SetRenderDrawColor(pRend, 0, 0, 0, 255);
-	SDL_RenderFillRect(pRend, &rect);
 
 	globalPauseUpdate = 1; // stop after every render so we dont consume too much cpu
 
+}
+
+#define WALL_PADDING_X 0.25 // percentage of target rect
+#define WALL_PADDING_TOP 0.25 // percentage of target rect
+#define WALL_PADDING_BOTTOM 0.75 // percentage of target rect
+
+#define BEAM_THICKNESS_PERCENT 0.1 // percent of target rect
+#define BEAM_WIDTH_PERCENT 0.5 // percent of target rect
+
+void renderBeamArrows(SDL_Renderer * pRend, Beam beam, float forces[], float distances[], int forceCount, Polynomial polys, int polyCount)
+{
+	
+	/* float maxForce = ArrayMaxf(forces, forceCount); */
+	/* for (int i = 0; i < forceCount; i++) */
+	/* { */
+	/* 	int arrowStartX = 1; */
+	/* } */
+}
+
+void renderBeamArea(SDL_Renderer * pRend, SDL_Rect target)
+{
+	// render wall line
+	SDL_SetRenderDrawColor(pRend, 255, 255, 255, 255);
+	SDL_RenderDrawLine(pRend, 
+			(int) (WALL_PADDING_X * target.w + target.x),
+			(int) (WALL_PADDING_TOP * target.h + target.y),
+			(int) (WALL_PADDING_X * target.w + target.x),
+			(int) (WALL_PADDING_BOTTOM * target.h + target.y));
+
+	int beamThickness = target.y + target.h * BEAM_THICKNESS_PERCENT;
+	int beamX = WALL_PADDING_X * target.w + target.x;
+	int beamY = 0.5 * target.h + target.y - beamThickness/2;
+	int beamW = BEAM_WIDTH_PERCENT * target.w + target.x;
+	SDL_Rect beamRect = { beamX, beamY, beamW, beamThickness};
+
+	float forces[1];
+	float distances[1];
+	Polynomial polys[1];
+
+	Beam beam;
+	beam.length = 1.0;
+	beam.screenRect = beamRect;
+
+	// render beam stress
+	renderBeamStress(pRend, beam, forces, distances, 0, polys, 0);
+	
+	// render beam outline
+	SDL_SetRenderDrawColor(pRend, 255, 255, 255, 255);
+	SDL_RenderDrawRect(pRend, &beamRect);
+
+	// render beam arrows
+	/* renderBeamArrows(pRend, target, forces, distances, 2, polynomials, 3); */
+
+	// render graphs for each polynomial
+	/* renderBeamGraphs(pRend, target, polynomials, 3); */
 }
 
 void renderTriangle(SDL_Renderer * pRend, SDL_Color color, int x1, int y1,int x2, int y2,int x3, int y3) 

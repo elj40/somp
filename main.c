@@ -256,14 +256,17 @@ void renderBeamStress(SDL_Renderer * pRend, Beam beam, float forces[], float dis
 
 	// TODO: calculate everything in a seperate function then render it here (really? what advantages does this give us?)
 	float maxStress = calculateStressPolynomials(0.0, polys, polyCount);
-	for (int x = 1; x <= beam.screenRect.w; x++)
+	for (int sx = 1; sx <= beam.screenRect.w; sx++)
 	{
-		float beamStress = calculateStressPolynomials((float) x, polys, polyCount);
+		float x = (float) sx / beam.screenRect.w;
+		float beamStress = calculateStressPolynomials(x, polys, polyCount);
 
 		SDL_Color color = colorFromStress(beamStress, maxStress);
 		SDL_SetRenderDrawColor(pRend, color.r, color.g, color.b, color.a);
 		SDL_RenderDrawLine(pRend, beam.screenRect.x+x, beam.screenRect.y, beam.screenRect.x+x, beam.screenRect.y+beam.screenRect.h);
 	}
+
+	printf("Maxstress: %f\n", maxStress);
 
 	globalPauseUpdate = 1; // stop after every render so we dont consume too much cpu
 
@@ -310,8 +313,15 @@ void renderBeamArea(SDL_Renderer * pRend, SDL_Rect target)
 	beam.length = 1.0;
 	beam.screenRect = beamRect;
 
+	polys[0].start = 0.5 * beam.length;
+	polys[0].end = 1.0 * beam.length;
+	polys[0].coefficients[0] = 3;
+
+	forces[0] = 5;
+	distances[0] = beam.length;
+
 	// render beam stress
-	renderBeamStress(pRend, beam, forces, distances, 0, polys, 0);
+	renderBeamStress(pRend, beam, forces, distances, 0, polys, 1);
 	
 	// render beam outline
 	SDL_SetRenderDrawColor(pRend, 255, 255, 255, 255);

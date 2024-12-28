@@ -9,6 +9,7 @@
 #define MAX_POLYNOMIAL_DEGREE 3
 #include <stdlib.h>
 #include <string.h>
+#include "utils.c"
 
 struct PointForce 
 {
@@ -50,6 +51,13 @@ void printDF(const void * vd)
 	printf("DistributedForce -> start: %f, end: %f, coeff0: %f\n", d->start, d->end, d->polynomial[0]);
 }
 
+// print a DistributedForce from pointer
+void printDFp(const void * vd)
+{
+	DistributedForce ** d = (DistributedForce **) vd;
+	printf("DistributedForce -> start: %f, end: %f, coeff0: %f\n", (*d)->start, (*d)->end, (*d)->polynomial[0]);
+}
+
 void printStructArray(const void * arr, int count, int size, void (* printStruct)(const void *) )
 {
 	printf("[\n");
@@ -76,6 +84,20 @@ int compPointDists(const void * a, const void * b)
 	
 	return 0;
 }
+
+int compDistributedStartsP(const void * a, const void * b)
+{
+	DistributedForce ** adp = (DistributedForce **) a;
+	DistributedForce ** bdp = (DistributedForce **) b;
+	DistributedForce * ad = *adp;
+	DistributedForce * bd = *bdp;
+
+	if (ad->start < bd->start) return -1;
+	else if (ad->start > bd->start) return 1;
+	
+	return 0;
+}
+
 int compDistributedStarts(const void * a, const void * b)
 {
 	DistributedForce * ad = (DistributedForce *) a;
@@ -85,10 +107,24 @@ int compDistributedStarts(const void * a, const void * b)
 	
 	return 0;
 }
+
 int compDistributedEnds(const void * a, const void * b)
 {
 	DistributedForce * ad = (DistributedForce *) a;
 	DistributedForce * bd = (DistributedForce *) b;
+	if (ad->end < bd->end) return -1;
+	else if (ad->end > bd->end) return 1;
+	
+	return 0;
+}
+
+int compDistributedEndsP(const void * a, const void * b)
+{
+	DistributedForce ** adp = (DistributedForce **) a;
+	DistributedForce ** bdp = (DistributedForce **) b;
+	DistributedForce * ad = *adp;
+	DistributedForce * bd = *bdp;
+
 	if (ad->end < bd->end) return -1;
 	else if (ad->end > bd->end) return 1;
 	
@@ -101,24 +137,67 @@ void seperateBeamIntoSections(float beamLength,
 {
 	// First test input
 	/* beamLength = 1.0; */
+	/* dForces[0] = (DistributedForce){ 0.25, 0.75, {2,0} }; */
 	/* dForces[1] = (DistributedForce){ 0, 0.5, {1,0} }; */
-	/* dForces[2] = (DistributedForce){ 0.25, 0.75, {2,0} }; */
+	/* dfCount = 2; */
 
-	PointForce * pF = pForces;
-	DistributedForce * dFS = dForces;
-	DistributedForce * dFE = malloc(dfCount * sizeof(DistributedForce));
-	memcpy( dFE, dForces, dfCount * sizeof(DistributedForce) );
+	/* PointForce * pF = pForces; */
+	/* DistributedForce * dFS = dForces; */
+	/* DistributedForce * dFE = malloc(dfCount * sizeof(DistributedForce)); */
+	/* memcpy( dFE, dForces, dfCount * sizeof(DistributedForce) ); */
 
-	printStructArray(dForces, 2, sizeof(DistributedForce), printDF);
+	// Make an array of pointers
+	DistributedForce ** dFS = malloc(dfCount * sizeof(DistributedForce *));
+	DistributedForce ** dFE = malloc(dfCount * sizeof(DistributedForce *));
 
-	TODO("Sort each array");
-	/* qsort( (void*) pF , (size_t) pfCount, sizeof (PointForce), compPointDists ); */
-	/* qsort( (void*) dFS, (size_t) dfCount, sizeof (DistributedForce), compDistributedStarts ); */
-	/* qsort( (void*) dFE, (size_t) dfCount, sizeof (DistributedForce), compDistributedEnds ); */
+	for ( int i = 0; i < dfCount; i++ )
+	{
+		dFS[i] = &dForces[i];
+		dFE[i] = &dForces[i];
+	}
+
+	printf("Unsorted starts: ");
+	printStructArray(dFS, dfCount, sizeof(DistributedForce*), printDFp);
+	printf("Unsorted ends: ");
+	printStructArray(dFE, dfCount, sizeof(DistributedForce*), printDFp);
+
+	/* qsort( pF , pfCount, sizeof (PointForce), compPointDists ); */
+	qsort( dFS, dfCount, sizeof (DistributedForce *), compDistributedStartsP );
+	qsort( dFE, dfCount, sizeof (DistributedForce *), compDistributedEndsP );
 	
+	printf("\n");
+	printf("Sorted starts: ");
+	printStructArray(dFS, dfCount, sizeof(DistributedForce*), printDFp);
+	printf("Sorted ends: ");
+	printStructArray(dFE, dfCount, sizeof(DistributedForce*), printDFp);
+
 	TODO("Split into sections");
+	int iDS = 0, iDE = 0, iPF = 0; // index of dFS, dFE, pF
+	LL_Node * head = NULL;
+	while (iDS < dfCount || iDE < dfCount)
+	{
+		if (iDS < dfCount && dFS[iDS]->start < dFE[iDE]->end)
+		{
+			TODO("Found a start");
+			// Create new section
+			// Sum up linked list
+			// Push force to linked list
+			LL_push(&head, dFS[iDS]);
+			iDS++;
+		} else 
+		{
+			TODO("Found an end");
+			// Create new section
+			// Sum up linked list
+			// Remove force from linked list
+			LL_remove(&head, dFE[iDE]);
+			iDE++;
+		}
+		LL_print(head, printDF);
+	}
 	*sectionsCount = 1;
 
+	free(dFS);
 	free(dFE);
 }
 

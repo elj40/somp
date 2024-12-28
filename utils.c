@@ -27,3 +27,7 @@ float ArrayMaxf(float nums[], int n)
 
 	return max;
 }
+
+void printStructArray(const void * arr, void (* printStruct)(const void * a))
+{
+}

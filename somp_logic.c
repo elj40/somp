@@ -37,25 +37,31 @@ struct Section
 
 typedef struct Section Section;
 
+// printSection
+void printSection(const void * vp)
+{
+	Section * s = (Section *)vp;
+	printf("Section:: start: %f, end: %f, coeff0: %f\n", s->start, s->end, s->polynomial[0]);
+}
 // printPointForce
 void printPF(const void * vp)
 {
 	PointForce * p = (PointForce *) vp;
-	printf("PointForce -> distance: %f, force: %f\n", p->distance, p->force);
+	printf("PointForce:: distance: %f, force: %f\n", p->distance, p->force);
 }
 
 // print a DistributedForce
 void printDF(const void * vd)
 {
 	DistributedForce * d = (DistributedForce *) vd;
-	printf("DistributedForce -> start: %f, end: %f, coeff0: %f\n", d->start, d->end, d->polynomial[0]);
+	printf("DistributedForce:: start: %f, end: %f, coeff0: %f\n", d->start, d->end, d->polynomial[0]);
 }
 
 // print a DistributedForce from pointer
-void printDFp(const void * vd)
+void printDFptr(const void * vd)
 {
 	DistributedForce ** d = (DistributedForce **) vd;
-	printf("DistributedForce -> start: %f, end: %f, coeff0: %f\n", (*d)->start, (*d)->end, (*d)->polynomial[0]);
+	printf("DistributedForce:: start: %f, end: %f, coeff0: %f\n", (*d)->start, (*d)->end, (*d)->polynomial[0]);
 }
 
 void printStructArray(const void * arr, int count, int size, void (* printStruct)(const void *) )
@@ -69,7 +75,21 @@ void printStructArray(const void * arr, int count, int size, void (* printStruct
 	}
 	printf("]\n");
 }
-	
+
+void LL_SumDistributedPolynomials(LL_Node * head, float poly[])
+{
+	LL_Node * current = head;
+	while (current)
+	{
+		DistributedForce * d = (DistributedForce *) current->data;
+		for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
+		{
+			poly[i] += d->polynomial[i];
+		}
+		current = current->next;
+	}
+}
+
 
 /* comparison function which returns a negative integer value if the
  * first argument is less than the second, a positive integer value if the
@@ -85,7 +105,7 @@ int compPointDists(const void * a, const void * b)
 	return 0;
 }
 
-int compDistributedStartsP(const void * a, const void * b)
+int compDistributedStartsPtr(const void * a, const void * b)
 {
 	DistributedForce ** adp = (DistributedForce **) a;
 	DistributedForce ** bdp = (DistributedForce **) b;
@@ -118,7 +138,7 @@ int compDistributedEnds(const void * a, const void * b)
 	return 0;
 }
 
-int compDistributedEndsP(const void * a, const void * b)
+int compDistributedEndsPtr(const void * a, const void * b)
 {
 	DistributedForce ** adp = (DistributedForce **) a;
 	DistributedForce ** bdp = (DistributedForce **) b;
@@ -141,11 +161,6 @@ void seperateBeamIntoSections(float beamLength,
 	/* dForces[1] = (DistributedForce){ 0, 0.5, {1,0} }; */
 	/* dfCount = 2; */
 
-	/* PointForce * pF = pForces; */
-	/* DistributedForce * dFS = dForces; */
-	/* DistributedForce * dFE = malloc(dfCount * sizeof(DistributedForce)); */
-	/* memcpy( dFE, dForces, dfCount * sizeof(DistributedForce) ); */
-
 	// Make an array of pointers
 	DistributedForce ** dFS = malloc(dfCount * sizeof(DistributedForce *));
 	DistributedForce ** dFE = malloc(dfCount * sizeof(DistributedForce *));
@@ -156,49 +171,59 @@ void seperateBeamIntoSections(float beamLength,
 		dFE[i] = &dForces[i];
 	}
 
-	printf("Unsorted starts: ");
-	printStructArray(dFS, dfCount, sizeof(DistributedForce*), printDFp);
-	printf("Unsorted ends: ");
-	printStructArray(dFE, dfCount, sizeof(DistributedForce*), printDFp);
-
 	/* qsort( pF , pfCount, sizeof (PointForce), compPointDists ); */
-	qsort( dFS, dfCount, sizeof (DistributedForce *), compDistributedStartsP );
-	qsort( dFE, dfCount, sizeof (DistributedForce *), compDistributedEndsP );
-	
-	printf("\n");
-	printf("Sorted starts: ");
-	printStructArray(dFS, dfCount, sizeof(DistributedForce*), printDFp);
-	printf("Sorted ends: ");
-	printStructArray(dFE, dfCount, sizeof(DistributedForce*), printDFp);
+	qsort( dFS, dfCount, sizeof (DistributedForce *), compDistributedStartsPtr );
+	qsort( dFE, dfCount, sizeof (DistributedForce *), compDistributedEndsPtr );
 
 	TODO("Split into sections");
 	int iDS = 0, iDE = 0, iPF = 0; // index of dFS, dFE, pF
+	int iSection = 0;
 	LL_Node * head = NULL;
 	while (iDS < dfCount || iDE < dfCount)
 	{
 		if (iDS < dfCount && dFS[iDS]->start < dFE[iDE]->end)
 		{
-			TODO("Found a start");
 			// Create new section
+			sections[iSection].end = dFS[iDS]->start;
+
 			// Sum up linked list
+			LL_SumDistributedPolynomials(head, sections[iSection].polynomial);
+
+			iSection++;
+			sections[iSection].start = dFS[iDS]->start;
+
 			// Push force to linked list
 			LL_push(&head, dFS[iDS]);
 			iDS++;
 		} else 
 		{
-			TODO("Found an end");
 			// Create new section
+			sections[iSection].end = dFE[iDE]->end;
+
 			// Sum up linked list
+			LL_SumDistributedPolynomials(head, sections[iSection].polynomial);
+
+			iSection++;
+			sections[iSection].start = dFE[iDE]->end;
 			// Remove force from linked list
 			LL_remove(&head, dFE[iDE]);
 			iDE++;
 		}
 		LL_print(head, printDF);
 	}
+
+	// make sure sections cover only/entirely the beam
+	if (sections[iSection].start < beamLength) sections[iSection].end = beamLength;
+	else sections[--iSection].end = beamLength;
+
+	sections++; //Discard the first struct because it goes from 0 to 0, hacky way of doing it
+	printStructArray(sections, iSection, sizeof(Section), printSection);
+
 	*sectionsCount = 1;
 
 	free(dFS);
 	free(dFE);
+	LL_free(head);
 }
 
 int calculateWallReactionForce(PointForce pForces[], int pfCount, DistributedForce dForces[], int dfCount)

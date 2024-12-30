@@ -32,6 +32,7 @@ struct Section
 {
 	float start;
 	float end;
+	float pointForce;
 	float polynomial[MAX_POLYNOMIAL_DEGREE];
 };
 
@@ -41,7 +42,7 @@ typedef struct Section Section;
 void printSection(const void * vp)
 {
 	Section * s = (Section *)vp;
-	printf("Section:: start: %f, end: %f, coeff0: %f\n", s->start, s->end, s->polynomial[0]);
+	printf("Section:: start: %f, end: %f, pointForce: %f, coeff0: %f\n", s->start, s->end, s->pointForce, s->polynomial[0]);
 }
 // printPointForce
 void printPF(const void * vp)
@@ -150,18 +151,11 @@ int compDistributedEndsPtr(const void * a, const void * b)
 	
 	return 0;
 }
-void seperateBeamIntoSections(float beamLength, 
-		PointForce pForces[], 		int pfCount, 
-		DistributedForce dForces[], 	int dfCount, 
-		Section sections[], 		int * sectionsCount)
+void seperateBeamIntoSections(float beamLength, PointForce pForces[], 		int pfCount, DistributedForce dForces[], 	int dfCount, Section sections[], 		int * sectionsCount)
 {
-	// First test input
-	/* beamLength = 1.0; */
-	/* dForces[0] = (DistributedForce){ 0.25, 0.75, {2,0} }; */
-	/* dForces[1] = (DistributedForce){ 0, 0.5, {1,0} }; */
-	/* dfCount = 2; */
 
-	// Make an array of pointers
+	PointForce * pF = pForces;
+	// Make an array of pointers so we can sort them based on ends vs starts
 	DistributedForce ** dFS = malloc(dfCount * sizeof(DistributedForce *));
 	DistributedForce ** dFE = malloc(dfCount * sizeof(DistributedForce *));
 
@@ -171,19 +165,60 @@ void seperateBeamIntoSections(float beamLength,
 		dFE[i] = &dForces[i];
 	}
 
-	/* qsort( pF , pfCount, sizeof (PointForce), compPointDists ); */
+	// Sorting lets us use a cool trick, narrows down the checks we have to
+	// do since we know which shoud come next
+	// With this, we can keep a current index for each array and then move
+	// it up once we "use" it
+	qsort( pF , pfCount, sizeof (PointForce), compPointDists );
 	qsort( dFS, dfCount, sizeof (DistributedForce *), compDistributedStartsPtr );
 	qsort( dFE, dfCount, sizeof (DistributedForce *), compDistributedEndsPtr );
 
-	TODO("Split into sections");
 	int iDS = 0, iDE = 0, iPF = 0; // index of dFS, dFE, pF
 	int iSection = 0;
 	LL_Node * head = NULL;
-	while (iDS < dfCount || iDE < dfCount)
+
+	printStructArray(pF, pfCount, sizeof(PointForce), printPF);
+	printStructArray(dFS, dfCount, sizeof(DistributedForce*), printDFptr);
+
+	while (iDS < dfCount || iDE < dfCount || iPF < pfCount)
 	{
-		if (iDS < dfCount && dFS[iDS]->start < dFE[iDE]->end)
+
+		// Note: these booleans are a little janky but we need them
+		// like this to ensure that we are always only checking valid
+		// pointers and so we can keep a nice and simple if else flow
+		// control
+		//
+		// A better approach would be appreciated
+		
+		int P_less_S = (iDS < dfCount) ? pF[iPF].distance < dFS[iDS]->start : 1;
+		int P_less_E = (iDE < dfCount) ? pF[iPF].distance < dFE[iDE]->end : 1;
+		
+		int S_less_E = iDS < dfCount && ((iDE < dfCount) ? dFS[iDS]->start < dFE[iDE]->end : 1);
+		if (iPF < pfCount && P_less_S && P_less_E)
 		{
+			// POINT FORCE
 			// Create new section
+			int x = !nearlyEqual(pF[iPF].distance, sections[iSection].start);
+			if (x)
+			{
+			sections[iSection].end = pF[iPF].distance;
+
+			// Sum up linked list
+			LL_SumDistributedPolynomials(head, sections[iSection].polynomial);
+
+			iSection++;
+			sections[iSection].start = pF[iPF].distance;
+			}
+
+			// Save force in section
+			sections[iSection].pointForce = pF[iPF].force;
+			iPF++;
+		} else if (iDS < dfCount && S_less_E)
+		{
+			// START
+			// Create new section
+			if (!nearlyEqual(dFS[iDS]->start, sections[iSection].start))
+			{
 			sections[iSection].end = dFS[iDS]->start;
 
 			// Sum up linked list
@@ -191,12 +226,14 @@ void seperateBeamIntoSections(float beamLength,
 
 			iSection++;
 			sections[iSection].start = dFS[iDS]->start;
+			}
 
 			// Push force to linked list
 			LL_push(&head, dFS[iDS]);
 			iDS++;
-		} else 
+		} else
 		{
+			// END
 			// Create new section
 			sections[iSection].end = dFE[iDE]->end;
 
@@ -209,17 +246,13 @@ void seperateBeamIntoSections(float beamLength,
 			LL_remove(&head, dFE[iDE]);
 			iDE++;
 		}
-		LL_print(head, printDF);
-	}
+}
 
 	// make sure sections cover only/entirely the beam
 	if (sections[iSection].start < beamLength) sections[iSection].end = beamLength;
-	else sections[--iSection].end = beamLength;
+	else sections[iSection-1].end = beamLength;
 
-	sections++; //Discard the first struct because it goes from 0 to 0, hacky way of doing it
-	printStructArray(sections, iSection, sizeof(Section), printSection);
-
-	*sectionsCount = 1;
+	*sectionsCount = iSection;
 
 	free(dFS);
 	free(dFE);

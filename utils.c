@@ -5,8 +5,10 @@
 *
 * Some simple quality of life functions
 */
+#define EPSILON (1.0/2048.0)
 #define ArrayCount(array) (sizeof(array)/sizeof(array[0])) // NOTE: this only works in same scope as when the array was made
 #include <stdlib.h>
+#include <math.h>
 
 int ArrayMax(int nums[], int n)
 {
@@ -27,6 +29,11 @@ float ArrayMaxf(float nums[], int n)
 	}
 
 	return max;
+}
+
+int nearlyEqual(float a, float b)
+{
+	return fabs(a - b) < EPSILON;
 }
 
 // Used as a generic print function for printing ints

@@ -6,10 +6,13 @@
 * module that contains the math part of somp, stuff like solving the beam
 * stresses
 */
-#define MAX_POLYNOMIAL_DEGREE 3
+#define MAX_POLYNOMIAL_DEGREE 4
 #include <stdlib.h>
 #include <string.h>
 #include "utils.c"
+
+void integratePolynomial(float dest[MAX_POLYNOMIAL_DEGREE], const float src[MAX_POLYNOMIAL_DEGREE]);
+float evalPolynomial(float x, float poly[]);
 
 struct PointForce 
 {
@@ -38,11 +41,26 @@ struct Section
 
 typedef struct Section Section;
 
+int compSections(Section a, Section b) 
+{
+	if (!nearlyEqual(a.start, b.start)) return 0;
+	if (!nearlyEqual(a.end, b.end)) return 0;
+	if (!nearlyEqual(a.pointForce, b.pointForce)) return 0;
+
+	return 1;
+}
+
 // printSection
 void printSection(const void * vp)
 {
 	Section * s = (Section *)vp;
-	printf("Section:: start: %f, end: %f, pointForce: %f, coeff0: %f\n", s->start, s->end, s->pointForce, s->polynomial[0]);
+	printf("Section:: start: %f, end: %f, pointForce: %f, poly: [", s->start, s->end, s->pointForce);
+	for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
+	{
+		printf("%.2f", s->polynomial[i]);
+		if (i < MAX_POLYNOMIAL_DEGREE-1) printf(", ");
+	}
+	printf("]\n");
 }
 // printPointForce
 void printPF(const void * vp)
@@ -151,7 +169,10 @@ int compDistributedEndsPtr(const void * a, const void * b)
 	
 	return 0;
 }
-void seperateBeamIntoSections(float beamLength, PointForce pForces[], 		int pfCount, DistributedForce dForces[], 	int dfCount, Section sections[], 		int * sectionsCount)
+void seperateBeamIntoSections(float beamLength,
+		PointForce pForces[],       int pfCount, 
+		DistributedForce dForces[], int dfCount, 
+		Section sections[],         int * sectionsCount)
 {
 
 	PointForce * pF = pForces;
@@ -177,8 +198,6 @@ void seperateBeamIntoSections(float beamLength, PointForce pForces[], 		int pfCo
 	int iSection = 0;
 	LL_Node * head = NULL;
 
-	printStructArray(pF, pfCount, sizeof(PointForce), printPF);
-	printStructArray(dFS, dfCount, sizeof(DistributedForce*), printDFptr);
 
 	while (iDS < dfCount || iDE < dfCount || iPF < pfCount)
 	{
@@ -246,7 +265,7 @@ void seperateBeamIntoSections(float beamLength, PointForce pForces[], 		int pfCo
 			LL_remove(&head, dFE[iDE]);
 			iDE++;
 		}
-}
+	}
 
 	// make sure sections cover only/entirely the beam
 	if (sections[iSection].start < beamLength) sections[iSection].end = beamLength;
@@ -259,36 +278,94 @@ void seperateBeamIntoSections(float beamLength, PointForce pForces[], 		int pfCo
 	LL_free(head);
 }
 
-int calculateWallReactionForce(PointForce pForces[], int pfCount, DistributedForce dForces[], int dfCount)
+void printPolynomial(float p[MAX_POLYNOMIAL_DEGREE])
 {
-	TODO("calculate wall reaction");
-	return 0;
+	printf("[ ");
+	for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
+	{
+		printf("%.1f", p[i]);
+		if (i < MAX_POLYNOMIAL_DEGREE-1 ) printf(", ");
+	}
+	printf(" ]");
+
 }
 
-float evalPolynomial(float poly[])
+float calculateWallReactionForce(Section sections[], int sectionsCount)
 {
-	TODO("evaluate polynomial");
-	return 0.0;
+	// Prefer to do calculate wall reaction force using sections because it
+	// ensures that we dont consider forces longer than the beam
+	/* TODO("calculate wall reaction"); */
+
+	float pointSum = 0;
+	float distributedSum = 0;
+	float integrated[MAX_POLYNOMIAL_DEGREE];
+
+	for (int i = 0; i < sectionsCount; i++)
+	{
+		pointSum += sections[i].pointForce;
+		integratePolynomial(integrated, sections[i].polynomial);
+
+		distributedSum += evalPolynomial(sections[i].end, integrated) - evalPolynomial(sections[i].start, integrated);
+	}
+	return pointSum + distributedSum;
 }
 
-void integratePolynomial(float poly[])
+float evalPolynomial(float x, float poly[MAX_POLYNOMIAL_DEGREE])
 {
-	TODO("integrate a polynomial");
+	float answer = 0;
+	for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
+	{
+		answer += poly[i] * pow(x, i);
+	}
+
+	return answer;
+}
+
+void integratePolynomial(float dest[MAX_POLYNOMIAL_DEGREE], const float src[MAX_POLYNOMIAL_DEGREE])
+{
+	// NOTE: if the src polynomial has a degree of MAX_POLYNOMIAL_DEGREE,
+	// that term will not be able to be integrated
+	// Make sure that MAX_POLYNOMIAL_DEGREE is always one higher than the
+	// highest degree in src
+	for (int i = 1; i < MAX_POLYNOMIAL_DEGREE; i++)
+	{
+		dest[i] = src[i-1]/(float)i;
+	}
+	dest[0] = 0.0f;
 }
 
 void solveBeam()
 {
-	float beamLength = 3.0;
-	Section sections[20] = {0};
-	int sectionsCount;
+	Section rawSections[20] = {0};
+	Section shearSections[20] = {0};
+	Section momentSections[20] = {0};
 
-	PointForce pointForces[1] = {0}; int pfCount = 0;
-	DistributedForce distributedForces[1] = {0}; int dfCount = 0;
-	// Seperate beam into sections
-	seperateBeamIntoSections(beamLength, pointForces, pfCount, distributedForces, dfCount, sections, &sectionsCount);
+	float beamLength = 1.0;
+	int pfCount = 0;
+	int dfCount = 0;
+	int sectionsCount = 0;
 
-	// Solve global wall force (first sections startForce)
-	sections[0].polynomial[0] = calculateWallReactionForce(pointForces, pfCount, distributedForces, dfCount);
+	PointForce       pointForces[5]   = {0}; 
+	DistributedForce distributedForces[5]   = {0};
+	Section          sections[20] = {0};
+	beamLength = 1.0;
+	pointForces[0] = (PointForce){ 0.0, 1 };
+	pointForces[1] = (PointForce){ 0.25,2 };
+	pointForces[2] = (PointForce){ 0.5, 3 };
+	pointForces[3] = (PointForce){ 1.0, 4 };
+	pfCount = 4;
+	distributedForces[0] = (DistributedForce){ 0, 0.5, {1,0} };
+	distributedForces[1] = (DistributedForce){ 0.25, 0.75, {2,0} };
+	distributedForces[2] = (DistributedForce){ 0.75, 1.0, {3,0} };
+	distributedForces[3] = (DistributedForce){ 0.65, 0.95, {4,0} };
+	dfCount = 4;
+
+	seperateBeamIntoSections(beamLength, pointForces, pfCount, distributedForces, dfCount, rawSections, &sectionsCount);
+
+	// Solve global wall force (first sections startForce) and sum it with
+	// the force applied at the start 
+	// (up is postive in this context)
+	rawSections[0].pointForce = calculateWallReactionForce(rawSections, sectionsCount) - rawSections[0].pointForce;
 
 	// For every section:
 	// 	integrate every sections polynomial (if it exists)
@@ -296,7 +373,32 @@ void solveBeam()
 	// 	store section in an array
 	for ( int i = 0; i < sectionsCount; i++ )
 	{
-		if (sections[i].polynomial) integratePolynomial(sections[i].polynomial);
-		if (i > 0) sections[i].polynomial[0] = evalPolynomial(sections[i-1].polynomial) - evalPolynomial(sections[i].polynomial);
+		shearSections[i].start = rawSections[i].start;
+		shearSections[i].end = rawSections[i].end;
+		integratePolynomial(shearSections[i].polynomial, rawSections[i].polynomial);
+
+		//Multiply the integral by -1 because in this context the
+		//distributed force would cause counterclockwise rotation
+		for (int j = 0; j < MAX_POLYNOMIAL_DEGREE; j++) shearSections[i].polynomial[j] *= -1;
+
+		// Solve for c
+		// end of previous = start of current + c - current point force
+		// => c = end of p - start of current + current pf
+
+		if (i > 0) 
+		{
+			shearSections[i].polynomial[0] = 0  /
+				+ evalPolynomial(shearSections[i].end, shearSections[i-1].polynomial) /
+				- evalPolynomial(shearSections[i].start, shearSections[i].polynomial)
+				+ rawSections[i].pointForce;
+		}
+
 	}
+	// Remember to include the wall reaction force
+	shearSections[0].polynomial[0] = rawSections[0].pointForce;
+	
+	printf("Raw:\n");
+	printStructArray(rawSections, sectionsCount, sizeof(Section), printSection);
+	printf("Shear:\n");
+	printStructArray(shearSections, sectionsCount, sizeof(Section), printSection);
 }

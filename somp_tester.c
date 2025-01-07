@@ -11,13 +11,80 @@
 #include <stdio.h>
 #include "somp_logic.c"
  
+void test(int condition, const char * fail_message);
 void testLinkedLists();
 void testFloatComparison();
+void testSeperateSections();
+void testWallReaction();
 
 int main()
 {
 	testFloatComparison();
 	testLinkedLists();
+	testSeperateSections();
+	testWallReaction();
+
+	printf("\nSolving beam:\n");
+	solveBeam();
+}
+void test(int condition, const char * fail_message)
+{
+	if (condition) printf(".");
+	else printf("F - %s\n", fail_message);
+}
+
+void testWallReaction()
+{
+	printf("Testing wall reaction:\n");
+	float wrf;
+
+	Section sections[] = {
+		(Section) { .pointForce = 1 },
+		(Section) { .pointForce = 2 },
+		(Section) { .pointForce = 3 }
+	};
+
+	wrf = calculateWallReactionForce(sections, 3);
+	test(nearlyEqual(wrf, 6), "Incorrect wall reaction force (sum of point sources)");
+	//////////////////////////////////////////////
+
+	sections[0] = (Section){ .start = 0, .end = 1 };
+	sections[0].polynomial[0] = 1;
+
+	wrf = calculateWallReactionForce(sections, 1);
+	test(nearlyEqual(wrf, 1),"Incorrect wall reaction force (integral of y=1)"); 
+	/////////////////////////////////////////////
+	
+	sections[0] = (Section){ .start = 0, .end = 1 };
+	sections[0].polynomial[1] = 1;
+
+	wrf = calculateWallReactionForce(sections, 1);
+	test(nearlyEqual(wrf, 0.5),"Incorrect wall reaction force (integral of y=x)"); 
+	//////////////////////////////////////////////
+	sections[0] = (Section){ .start = 0, .end = 1 };
+	sections[0].polynomial[2] = 1;
+
+	wrf = calculateWallReactionForce(sections, 1);
+	test(nearlyEqual(wrf, 1.0/3.0),"Incorrect wall reaction force (integral of y=x^2), check MAX_POLYNOMIAL_DEGREE"); 
+	//////////////////////////////////////////////
+	sections[0] = (Section){ .start = 0, .end = 3 };
+	sections[1] = (Section){ .start = 0, .end = 2 };
+	sections[2] = (Section){ .start = 0, .end = 1 };
+
+	sections[0].polynomial[0] = 1;
+	sections[1].polynomial[1] = 1;
+	sections[2].polynomial[2] = 1;
+
+	wrf = calculateWallReactionForce(sections, 3);
+	test(nearlyEqual(wrf, (1.0/3.0) + 2.0 + 3.0),"Incorrect wall reaction force (sum of polys), check MAX_POLYNOMIAL_DEGREE"); 
+	printf("\n");
+}
+void testSeperateSections()
+{
+	printf("Section tests:\n");
+	TODO("Write more section tests");
+	int r = 1;
+
 	float beamLength = 1.0;
 	int pfCount = 0;
 	int dfCount = 0;
@@ -28,9 +95,10 @@ int main()
 
 	beamLength = 1.0;
 	pForces[0] = (PointForce){ 0.0, 1 };
-	pForces[1] = (PointForce){ 0.25, 2 };
+	pForces[1] = (PointForce){ 0.25,2 };
 	pForces[2] = (PointForce){ 0.5, 3 };
-	pfCount = 3;
+	pForces[3] = (PointForce){ 1.0, 4 };
+	pfCount = 4;
 	dForces[0] = (DistributedForce){ 0, 0.5, {1,0} };
 	dForces[1] = (DistributedForce){ 0.25, 0.75, {2,0} };
 	dForces[2] = (DistributedForce){ 0.75, 1.0, {3,0} };
@@ -38,10 +106,34 @@ int main()
 	dfCount = 4;
 
 	seperateBeamIntoSections(beamLength, pForces, pfCount, dForces, dfCount, sections, &sectionsCount);
+	/* printStructArray(sections, sectionsCount, sizeof(Section), printSection); */
 
-	printStructArray(sections, sectionsCount, sizeof(Section), printSection);
+	Section expectedSections[] = {
+		(Section){ .start = 0.000000, .end = 0.250000, .pointForce =  1.000000 },
+		(Section){ .start = 0.250000, .end = 0.500000, .pointForce =  2.000000 },
+		(Section){ .start = 0.500000, .end = 0.650000, .pointForce =  3.000000 },
+		(Section){ .start = 0.650000, .end = 0.750000, .pointForce =  0.000000 },
+		(Section){ .start = 0.750000, .end = 0.950000, .pointForce =  0.000000 },
+		(Section){ .start = 0.950000, .end = 1.000000, .pointForce =  0.000000 },
+	};
+
+	if (sectionsCount == ArrayCount(expectedSections)) printf(".");
+	else printf("F - wrong number of sections\n");
+
+	for (int i = 0; i < sectionsCount; i++)
+	{
+		if (!compSections(sections[i], expectedSections[i]))
+		{
+			printf("F - Section does not match expected section:\n");
+			printf("Found:    "); printSection(&sections[i]);
+			printf("Expected: "); printSection(&expectedSections[i]);
+			r = 0;
+		} 
+	}
+	if (r) printf(".");
+
+	printf("\n");
 }
-
 void testFloatComparison()
 {
 	printf("Floating point comparison tests\n");

@@ -50,11 +50,10 @@ int compSections(Section a, Section b)
 	return 1;
 }
 
-// printSection
 void printSection(const void * vp)
 {
 	Section * s = (Section *)vp;
-	printf("Section:: start: %f, end: %f, pointForce: %f, poly: [", s->start, s->end, s->pointForce);
+	printf("Section:: start: %.3f, end: %.3f, pointForce: %.3f, poly: [", s->start, s->end, s->pointForce);
 	for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
 	{
 		printf("%.2f", s->polynomial[i]);
@@ -290,6 +289,23 @@ void printPolynomial(float p[MAX_POLYNOMIAL_DEGREE])
 
 }
 
+float calculateWallReactionMoment(Section sections[], int sectionsCount)
+{
+	float pointSum = 0;
+	float distributedSum = 0;
+	float integrated[MAX_POLYNOMIAL_DEGREE];
+
+	for ( int i = 0; i < sectionsCount; i++ )
+	{
+		pointSum += sections[i].pointForce * sections[i].start;
+		
+		integratePolynomial(integrated, sections[i].polynomial);
+		float integral = evalPolynomial(sections[i].end, integrated) - evalPolynomial(sections[i].start, integrated);
+		distributedSum += integral * (sections[i].start + sections[i].end)/2;
+	}
+	return pointSum + distributedSum;
+}
+
 float calculateWallReactionForce(Section sections[], int sectionsCount)
 {
 	// Prefer to do calculate wall reaction force using sections because it
@@ -362,15 +378,11 @@ void solveBeam()
 
 	seperateBeamIntoSections(beamLength, pointForces, pfCount, distributedForces, dfCount, rawSections, &sectionsCount);
 
-	// Solve global wall force (first sections startForce) and sum it with
-	// the force applied at the start 
-	// (up is postive in this context)
-	rawSections[0].pointForce = calculateWallReactionForce(rawSections, sectionsCount) - rawSections[0].pointForce;
+	// Solve global wall force (first sections startForce) 
+	float wallReactionForce = calculateWallReactionForce(rawSections, sectionsCount);
+	float wallReactionMoment = -calculateWallReactionMoment(rawSections, sectionsCount);
 
-	// For every section:
-	// 	integrate every sections polynomial (if it exists)
-	// 	find c-value of every section (startForce)
-	// 	store section in an array
+	// Shear section calculations
 	for ( int i = 0; i < sectionsCount; i++ )
 	{
 		shearSections[i].start = rawSections[i].start;
@@ -385,20 +397,42 @@ void solveBeam()
 		// end of previous = start of current + c - current point force
 		// => c = end of p - start of current + current pf
 
-		if (i > 0) 
+		if (i == 0) shearSections[i].polynomial[0] = wallReactionForce - rawSections[0].pointForce;
+		else
 		{
-			shearSections[i].polynomial[0] = 0  /
-				+ evalPolynomial(shearSections[i].end, shearSections[i-1].polynomial) /
-				- evalPolynomial(shearSections[i].start, shearSections[i].polynomial)
-				+ rawSections[i].pointForce;
+			float previous = evalPolynomial(shearSections[i-1].end, shearSections[i-1].polynomial);
+			float current = evalPolynomial(shearSections[i].start, shearSections[i].polynomial);
+			float point_force = rawSections[i].pointForce;
+			shearSections[i].polynomial[0] =  previous - current - point_force;
 		}
 
 	}
-	// Remember to include the wall reaction force
-	shearSections[0].polynomial[0] = rawSections[0].pointForce;
 	
 	printf("Raw:\n");
 	printStructArray(rawSections, sectionsCount, sizeof(Section), printSection);
 	printf("Shear:\n");
 	printStructArray(shearSections, sectionsCount, sizeof(Section), printSection);
+
+	// Moment sections calculations
+	for ( int i = 0; i < sectionsCount; i++ )
+	{
+		momentSections[i].start = shearSections[i].start;
+		momentSections[i].end = shearSections[i].end;
+
+		integratePolynomial(momentSections[i].polynomial, shearSections[i].polynomial);
+
+		//do not need to multiply by negative one here
+
+		if (i == 0) momentSections[i].polynomial[0] = wallReactionMoment;
+		else
+		{
+			float previous = evalPolynomial(momentSections[i-1].end, momentSections[i-1].polynomial);
+			float current = evalPolynomial(momentSections[i].start, momentSections[i].polynomial);
+			// TODO: consider point moments
+			momentSections[i].polynomial[0] =  previous - current;
+		}
+	}
+
+	printf("Moment:\n");
+	printStructArray(momentSections, sectionsCount, sizeof(Section), printSection);
 }

@@ -2,7 +2,6 @@
 #define SOMP_LOGIC_H
 
 #include <stdbool.h>
-#include "utils.h"
 
 #define MAX_POLYNOMIAL_DEGREE 4
 #define MAX_SECTIONS 20

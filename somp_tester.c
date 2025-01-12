@@ -9,7 +9,8 @@
 
 #define TODO(msg) printf("[%s, %d] TODO: "msg"\n",__FILE__, __LINE__);
 #include <stdio.h>
-#include "somp_logic.c"
+#include "somp_logic.h"
+#include "utils.h"
  
 void test(int condition, const char * fail_message);
 void testLinkedLists();
@@ -25,7 +26,35 @@ int main()
 	testWallReaction();
 
 	printf("\nSolving beam:\n");
-	solveBeam();
+	Beam beam = {0};
+	beam.length = 1.0;
+	beam.sectionsCount = MAX_SECTIONS;
+
+	PointForce pointForces[10]; //TODO: figure out how many we should allocate for
+	int pfCount;
+	pointForces[0] = (PointForce){ 0.0, 1 };
+	pointForces[1] = (PointForce){ 0.25,2 };
+	pointForces[2] = (PointForce){ 0.5, 3 };
+	pointForces[3] = (PointForce){ 1.0, 4 };
+	pfCount = 4;
+
+	DistributedForce distributedForces[10];
+	int dfCount;
+	distributedForces[0] = (DistributedForce){ 0, 0.5, {1,0} };
+	distributedForces[1] = (DistributedForce){ 0.25, 0.75, {2,0} };
+	distributedForces[2] = (DistributedForce){ 0.75, 1.0, {3,0} };
+	distributedForces[3] = (DistributedForce){ 0.65, 0.95, {4,0} };
+	dfCount = 4;
+	solveBeam(&beam, pointForces, pfCount, distributedForces, dfCount);
+
+	printf("Raw:\n");
+	printStructArray(beam.raws, beam.sectionsCount, sizeof(Section), printSection);
+
+	printf("Shear:\n");
+	printStructArray(beam.shears, beam.sectionsCount, sizeof(Section), printSection);
+
+	printf("Moment:\n");
+	printStructArray(beam.moments, beam.sectionsCount, sizeof(Section), printSection);
 }
 void test(int condition, const char * fail_message)
 {
@@ -88,7 +117,7 @@ void testSeperateSections()
 	float beamLength = 1.0;
 	int pfCount = 0;
 	int dfCount = 0;
-	int sectionsCount = 0;
+	int sectionsCount = MAX_SECTIONS;
 	PointForce       pForces[5]   = {0}; 
 	DistributedForce dForces[5]   = {0};
 	Section          sections[20] = {0};

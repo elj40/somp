@@ -24,6 +24,6 @@
 int main()
 {
 	printf("Hello SOMP\n");
-	solveBeam();
+	/* solveBeam(); */
 	return 0;
 }

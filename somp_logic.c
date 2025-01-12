@@ -4,42 +4,14 @@
 * Name:		EL Joubert
 *
 * module that contains the math part of somp, stuff like solving the beam
-* stresses
+* stressed
 */
-#define MAX_POLYNOMIAL_DEGREE 4
 #include <stdlib.h>
 #include <string.h>
-#include "utils.c"
+#include <stdio.h>
+#include "utils.h"
+#include "somp_logic.h"
 
-void integratePolynomial(float dest[MAX_POLYNOMIAL_DEGREE], const float src[MAX_POLYNOMIAL_DEGREE]);
-float evalPolynomial(float x, float poly[]);
-
-struct PointForce 
-{
-	float distance;
-	float force;
-};
-
-typedef struct PointForce PointForce;
-
-struct DistributedForce
-{
-	float start;
-	float end;
-	float polynomial[MAX_POLYNOMIAL_DEGREE];
-};
-
-typedef struct DistributedForce DistributedForce;
-
-struct Section
-{
-	float start;
-	float end;
-	float pointForce;
-	float polynomial[MAX_POLYNOMIAL_DEGREE];
-};
-
-typedef struct Section Section;
 
 int compSections(Section a, Section b) 
 {
@@ -49,6 +21,7 @@ int compSections(Section a, Section b)
 
 	return 1;
 }
+
 
 void printSection(const void * vp)
 {
@@ -168,7 +141,21 @@ int compDistributedEndsPtr(const void * a, const void * b)
 	
 	return 0;
 }
-void seperateBeamIntoSections(float beamLength,
+// Seperate beam into sections
+// Converts an array of point forces and potentially overlapping distributed
+// forces into an array of sections that cover the entire beam
+//
+// beamLength: length of the beam, used to cut off sections that go too far or add an "empty" section
+// pForces: array of point forces to be used
+// pfCount: number of elements in pForces
+// dForces: array of distributed forces to be used
+// dfCount: number of elements in dForces
+// sections: a buffer array that will be filled with Section objects
+// sectionsCount: pointer to a variable the holds the max amount of sections
+// 	allowed to be stored, if the number of sections found exceeds this number,
+// 	it will return false. After all the sections have been found sectionsCount
+// 	is updated to be the amount of sections in the sections array
+bool seperateBeamIntoSections(float beamLength,
 		PointForce pForces[],       int pfCount, 
 		DistributedForce dForces[], int dfCount, 
 		Section sections[],         int * sectionsCount)
@@ -266,6 +253,8 @@ void seperateBeamIntoSections(float beamLength,
 		}
 	}
 
+	if (iSection >= *sectionsCount) return false;
+
 	// make sure sections cover only/entirely the beam
 	if (sections[iSection].start < beamLength) sections[iSection].end = beamLength;
 	else sections[iSection-1].end = beamLength;
@@ -275,6 +264,8 @@ void seperateBeamIntoSections(float beamLength,
 	free(dFS);
 	free(dFE);
 	LL_free(head);
+
+	return true;
 }
 
 void printPolynomial(float p[MAX_POLYNOMIAL_DEGREE])
@@ -310,7 +301,6 @@ float calculateWallReactionForce(Section sections[], int sectionsCount)
 {
 	// Prefer to do calculate wall reaction force using sections because it
 	// ensures that we dont consider forces longer than the beam
-	/* TODO("calculate wall reaction"); */
 
 	float pointSum = 0;
 	float distributedSum = 0;
@@ -350,89 +340,69 @@ void integratePolynomial(float dest[MAX_POLYNOMIAL_DEGREE], const float src[MAX_
 	dest[0] = 0.0f;
 }
 
-void solveBeam()
+// NOTE: there is a lot of overlap between solveShearSections and
+// solveMomentSections, would be good to find a way to generalize this a bit
+void solveShearSections(Section shear[], Section raw[], int count)
 {
-	Section rawSections[20] = {0};
-	Section shearSections[20] = {0};
-	Section momentSections[20] = {0};
+	float wallReactionForce = calculateWallReactionForce(raw, count);
 
-	float beamLength = 1.0;
-	int pfCount = 0;
-	int dfCount = 0;
-	int sectionsCount = 0;
-
-	PointForce       pointForces[5]   = {0}; 
-	DistributedForce distributedForces[5]   = {0};
-	Section          sections[20] = {0};
-	beamLength = 1.0;
-	pointForces[0] = (PointForce){ 0.0, 1 };
-	pointForces[1] = (PointForce){ 0.25,2 };
-	pointForces[2] = (PointForce){ 0.5, 3 };
-	pointForces[3] = (PointForce){ 1.0, 4 };
-	pfCount = 4;
-	distributedForces[0] = (DistributedForce){ 0, 0.5, {1,0} };
-	distributedForces[1] = (DistributedForce){ 0.25, 0.75, {2,0} };
-	distributedForces[2] = (DistributedForce){ 0.75, 1.0, {3,0} };
-	distributedForces[3] = (DistributedForce){ 0.65, 0.95, {4,0} };
-	dfCount = 4;
-
-	seperateBeamIntoSections(beamLength, pointForces, pfCount, distributedForces, dfCount, rawSections, &sectionsCount);
-
-	// Solve global wall force (first sections startForce) 
-	float wallReactionForce = calculateWallReactionForce(rawSections, sectionsCount);
-	float wallReactionMoment = -calculateWallReactionMoment(rawSections, sectionsCount);
-
-	// Shear section calculations
-	for ( int i = 0; i < sectionsCount; i++ )
+	for (int i = 0; i < count; i++)
 	{
-		shearSections[i].start = rawSections[i].start;
-		shearSections[i].end = rawSections[i].end;
-		integratePolynomial(shearSections[i].polynomial, rawSections[i].polynomial);
+		shear[i].start = raw[i].start;
+		shear[i].end = raw[i].end;
 
-		//Multiply the integral by -1 because in this context the
-		//distributed force would cause counterclockwise rotation
-		for (int j = 0; j < MAX_POLYNOMIAL_DEGREE; j++) shearSections[i].polynomial[j] *= -1;
+		integratePolynomial(shear[i].polynomial, raw[i].polynomial);
 
-		// Solve for c
-		// end of previous = start of current + c - current point force
-		// => c = end of p - start of current + current pf
+		for (int j = 0; j < MAX_POLYNOMIAL_DEGREE; j++) shear[i].polynomial[j] *= -1;
 
-		if (i == 0) shearSections[i].polynomial[0] = wallReactionForce - rawSections[0].pointForce;
-		else
+		if (i == 0) shear[i].polynomial[0] = wallReactionForce - raw[0].pointForce;
+		else 
 		{
-			float previous = evalPolynomial(shearSections[i-1].end, shearSections[i-1].polynomial);
-			float current = evalPolynomial(shearSections[i].start, shearSections[i].polynomial);
-			float point_force = rawSections[i].pointForce;
-			shearSections[i].polynomial[0] =  previous - current - point_force;
-		}
-
-	}
-	
-	printf("Raw:\n");
-	printStructArray(rawSections, sectionsCount, sizeof(Section), printSection);
-	printf("Shear:\n");
-	printStructArray(shearSections, sectionsCount, sizeof(Section), printSection);
-
-	// Moment sections calculations
-	for ( int i = 0; i < sectionsCount; i++ )
-	{
-		momentSections[i].start = shearSections[i].start;
-		momentSections[i].end = shearSections[i].end;
-
-		integratePolynomial(momentSections[i].polynomial, shearSections[i].polynomial);
-
-		//do not need to multiply by negative one here
-
-		if (i == 0) momentSections[i].polynomial[0] = wallReactionMoment;
-		else
-		{
-			float previous = evalPolynomial(momentSections[i-1].end, momentSections[i-1].polynomial);
-			float current = evalPolynomial(momentSections[i].start, momentSections[i].polynomial);
-			// TODO: consider point moments
-			momentSections[i].polynomial[0] =  previous - current;
+			float previous = evalPolynomial(shear[i-1].end, shear[i-1].polynomial);
+			float current = evalPolynomial(shear[i].start, shear[i].polynomial);
+			float point = raw[i].pointForce;
+			shear[i].polynomial[0] =  previous - current - point;
 		}
 	}
+}
 
-	printf("Moment:\n");
-	printStructArray(momentSections, sectionsCount, sizeof(Section), printSection);
+void solveMomentSections(Section moment[], Section shear[], Section raw[], int count)
+{
+	float wallReactionMoment = -calculateWallReactionMoment(raw, count);
+
+	for (int i = 0; i < count; i++)
+	{
+		moment[i].start = shear[i].start;
+		moment[i].end = shear[i].end;
+ 
+ 		integratePolynomial(moment[i].polynomial, shear[i].polynomial);
+
+		if (i == 0) moment[i].polynomial[0] = wallReactionMoment;
+		else 
+		{
+			float previous = evalPolynomial(moment[i-1].end, moment[i-1].polynomial);
+			float current = evalPolynomial(moment[i].start, moment[i].polynomial);
+			//TODO: make point moments
+			moment[i].polynomial[0] =  previous - current;
+		}
+	}
+}
+bool solveBeam(Beam * beam,
+		PointForce pointForces[], int pfCount,
+		DistributedForce distributedForces[], int dfCount)
+{
+	Section * rawSections = beam->raws;
+	Section * shearSections = beam->shears;
+	Section * momentSections = beam->moments;
+	float beamLength = beam->length;
+
+	if (!seperateBeamIntoSections(beamLength, pointForces, pfCount, distributedForces, dfCount, rawSections, &beam->sectionsCount))
+	{
+		printf("ERROR: forces result in too many sections\n");
+		return false;
+	}
+	int sectionsCount = beam->sectionsCount;
+	solveShearSections(shearSections, rawSections, sectionsCount);
+	solveMomentSections(momentSections, shearSections, rawSections, sectionsCount);
+	return true;
 }

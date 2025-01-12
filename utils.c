@@ -5,10 +5,11 @@
 *
 * Some simple quality of life functions
 */
-#define EPSILON (1.0/2048.0)
-#define ArrayCount(array) (sizeof(array)/sizeof(array[0])) // NOTE: this only works in same scope as when the array was made
+
+#include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include "utils.h"
 
 int ArrayMax(int nums[], int n)
 {
@@ -43,13 +44,6 @@ void printInt(const void * i)
 	printf("%d", *n);
 }
 
-struct LL_Node
-{
-	void * data;
-	struct LL_Node * next;
-};
-
-typedef struct LL_Node LL_Node;
 
 // Linked list functions
 void LL_push(LL_Node ** head, void * data)

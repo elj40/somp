@@ -26,13 +26,23 @@
 
 #include "SDL.h"
 
-#define WINDOW_SIZE_FACTOR 30
+#define WINDOW_SIZE_FACTOR 80
 #define WINDOW_WIDTH (16*WINDOW_SIZE_FACTOR)
 #define WINDOW_HEIGHT (9*WINDOW_SIZE_FACTOR)
 #define WINDOW_X 0
 #define WINDOW_Y 100
 
 
+struct DownArrow
+{
+	int x; 
+	int y;
+	int size;
+};
+
+typedef struct DownArrow DownArrow;
+
+void renderDownArrow(SDL_Renderer* renderer, int x, int y, int size);
 
 int main(int argc, char * argv[])
 {
@@ -69,7 +79,17 @@ int main(int argc, char * argv[])
 	printf("Hello SOMP\n");
 
 	bool program_finished = false;
+
+	bool mouse_pressed = false;
+	
+
 	SDL_Event event;
+	int mouseX, mouseY;
+	Uint32 mouseState;
+
+	// TODO: make a dynamic array utility
+	DownArrow arrows[10];
+	int arrowCount = 0;
 	while (!program_finished)
 	{
 		while (SDL_PollEvent(&event))
@@ -83,6 +103,30 @@ int main(int argc, char * argv[])
 				       }
 			}
 		}
+
+		mouseState = SDL_GetMouseState(&mouseX, &mouseY);
+
+
+		if (mouseState & SDL_BUTTON_LEFT && !mouse_pressed && arrowCount < 10)
+		{
+			arrows[arrowCount] = (DownArrow) { mouseX, mouseY, WINDOW_HEIGHT-mouseY };
+			arrowCount++;
+		}
+
+		SDL_SetRenderDrawColor(pRenderer, 0,0,0, 255);
+		SDL_RenderClear(pRenderer);
+		SDL_SetRenderDrawColor(pRenderer, 255,255,255, 255);
+		
+		for (int i = 0; i < arrowCount; i++)
+		{
+			renderDownArrow(pRenderer, arrows[i].x, arrows[i].y, arrows[i].size);
+		};
+
+		renderDownArrow(pRenderer, mouseX, mouseY, WINDOW_HEIGHT-mouseY);
+		SDL_RenderPresent(pRenderer);
+
+		mouse_pressed = mouseState & SDL_BUTTON_LEFT; 
+
 	}
 
 	printf("Killing properly\n");
@@ -92,4 +136,20 @@ int main(int argc, char * argv[])
 	SDL_Quit();
 	
 	return 0;
+}
+
+// Function to render a down-pointing arrow
+// Written by ChatGPT
+void renderDownArrow(SDL_Renderer* renderer, int x, int y, int size) {
+    // Shaft length is proportional to the size
+    int shaftLength = size * 2 / 3; 
+    int arrowheadHeight = size - shaftLength;  // Remaining height for the arrowhead
+    
+    // Arrow shaft (vertical line)
+    SDL_RenderDrawLine(renderer, x, y, x, y + shaftLength);
+
+    // Arrowhead (triangle)
+    SDL_RenderDrawLine(renderer, x - size / 8, y + shaftLength, x + size / 8, y + shaftLength);  // Base of the triangle
+    SDL_RenderDrawLine(renderer, x - size / 8, y + shaftLength, x, y + shaftLength + arrowheadHeight);  // Left diagonal
+    SDL_RenderDrawLine(renderer, x + size / 8, y + shaftLength, x, y + shaftLength + arrowheadHeight);  // Right diagonal
 }

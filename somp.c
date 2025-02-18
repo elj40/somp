@@ -87,9 +87,30 @@ int main(int argc, char * argv[])
 	int mouseX, mouseY;
 	Uint32 mouseState;
 
+
+	Beam beam = {0};
+	beam.length = 1.0;
+	beam.sectionsCount = MAX_SECTIONS;
+
+	PointForce pointForces[10]; //TODO: figure out how many we should allocate for
+	int pfCount;
+	pointForces[0] = (PointForce){ 0.0, 1 };
+	pointForces[1] = (PointForce){ 0.25,2 };
+	pointForces[2] = (PointForce){ 0.5, 3 };
+	pointForces[3] = (PointForce){ 1.0, 4 };
+	pfCount = 4;
+
+	DistributedForce distributedForces[10];
+	int dfCount;
+	distributedForces[0] = (DistributedForce){ 0, 0.5, {1,0} };
+	distributedForces[1] = (DistributedForce){ 0.25, 0.75, {2,0} };
+	distributedForces[2] = (DistributedForce){ 0.75, 1.0, {3,0} };
+	distributedForces[3] = (DistributedForce){ 0.65, 0.95, {4,0} };
+	dfCount = 4;
+	solveBeam(&beam, pointForces, pfCount, distributedForces, dfCount);
+
+
 	// TODO: make a dynamic array utility
-	DownArrow arrows[10];
-	int arrowCount = 0;
 	while (!program_finished)
 	{
 		while (SDL_PollEvent(&event))
@@ -98,31 +119,38 @@ int main(int argc, char * argv[])
 			{
 			case SDL_QUIT: program_finished = true; break;
 			case SDL_KEYDOWN: 
-				       if (event.key.keysym.sym == SDLK_ESCAPE) {
+				       switch (event.key.keysym.sym) {
+				       case SDLK_ESCAPE:
 					       program_finished = true; break;
+				       case SDLK_SPACE:
+						printf("Raw:\n");
+						printStructArray(beam.raws, beam.sectionsCount, sizeof(Section), printSection);
+
+						printf("Shear:\n");
+						printStructArray(beam.shears, beam.sectionsCount, sizeof(Section), printSection);
+
+						printf("Moment:\n");
+						printStructArray(beam.moments, beam.sectionsCount, sizeof(Section), printSection);
+						break;
+
 				       }
 			}
 		}
 
 		mouseState = SDL_GetMouseState(&mouseX, &mouseY);
 
-
-		if (mouseState & SDL_BUTTON_LEFT && !mouse_pressed && arrowCount < 10)
-		{
-			arrows[arrowCount] = (DownArrow) { mouseX, mouseY, WINDOW_HEIGHT-mouseY };
-			arrowCount++;
-		}
-
 		SDL_SetRenderDrawColor(pRenderer, 0,0,0, 255);
 		SDL_RenderClear(pRenderer);
 		SDL_SetRenderDrawColor(pRenderer, 255,255,255, 255);
 		
-		for (int i = 0; i < arrowCount; i++)
+		for (int i = 0; i < pfCount; i++)
 		{
-			renderDownArrow(pRenderer, arrows[i].x, arrows[i].y, arrows[i].size);
+			int x = (pointForces[i].distance/beam.length) * WINDOW_WIDTH;
+			int y = WINDOW_HEIGHT - (pointForces[i].force/10) * WINDOW_HEIGHT;
+			int size = WINDOW_HEIGHT - y;
+			renderDownArrow(pRenderer, x, y, size);
 		};
 
-		renderDownArrow(pRenderer, mouseX, mouseY, WINDOW_HEIGHT-mouseY);
 		SDL_RenderPresent(pRenderer);
 
 		mouse_pressed = mouseState & SDL_BUTTON_LEFT; 
@@ -140,6 +168,7 @@ int main(int argc, char * argv[])
 
 // Function to render a down-pointing arrow
 // Written by ChatGPT
+// TODO: write a better alternative than chatgpt
 void renderDownArrow(SDL_Renderer* renderer, int x, int y, int size) {
     // Shaft length is proportional to the size
     int shaftLength = size * 2 / 3; 

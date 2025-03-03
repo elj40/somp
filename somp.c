@@ -21,7 +21,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+
+#define UTILS_IMPLEMENTATION
 #include "utils.h" // somp_logic.h depends on this so it should go first
+
 #include "somp_logic.h"
 
 #include "SDL.h"

@@ -9,8 +9,12 @@
 
 #define TODO(msg) printf("[%s, %d] TODO: "msg"\n",__FILE__, __LINE__);
 #include <stdio.h>
-#include "somp_logic.h"
+
+#define UTILS_IMPLEMENTATION
 #include "utils.h"
+
+#define SOMP_LOGIC_IMPLEMENTATION
+#include "somp_logic.h"
  
 void test(int condition, const char * fail_message);
 void testLinkedLists();

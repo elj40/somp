@@ -1,7 +1,7 @@
 #ifndef UTILS_H
 #define UTILS_H
 /*
-* Filename:	utils.c
+* Filename:	utils.h
 * Date:		14/12/2024 
 * Name:		EL Joubert
 *
@@ -10,6 +10,21 @@
 
 #define EPSILON (1.0/2048.0)
 #define ArrayCount(array) (sizeof(array)/sizeof(array[0])) // NOTE: this only works in same scope as when the array was made
+
+#include <assert.h>
+#define DEFAULT_DA_CAPACITY 5
+#define DynamicArrayAppend(da, item) \
+    do { \
+        if ((da)->count >= (da)->capacity) \
+        { \
+            if ((da)->capacity == 0) (da)->capacity = DEFAULT_DA_CAPACITY; \
+            else (da)->capacity *= 2; \
+            (da)->items = realloc((da)->items, (da)->capacity*sizeof((da)->items[0])); \
+            assert((da)->items != NULL); \
+        } \
+        (da)->items[(da)->count] = item; \
+        (da)->count++; \
+    } while(0); 
 
 struct LL_Node
 {

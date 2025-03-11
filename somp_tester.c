@@ -9,6 +9,8 @@
 
 #define TODO(msg) printf("[%s, %d] TODO: "msg"\n",__FILE__, __LINE__);
 #include <stdio.h>
+#include <stdlib.h>
+#include <assert.h>
 
 #define UTILS_IMPLEMENTATION
 #include "utils.h"
@@ -21,14 +23,52 @@ void testLinkedLists();
 void testFloatComparison();
 void testSeperateSections();
 void testWallReaction();
+void testSolveBeam();
+
+typedef struct {
+    int * items;
+    int capacity;
+    int count;
+} Ints;
+
+void printInts(Ints ints)
+{
+    printf("Ints: [ ");
+    for (int i = 0; i < ints.count; i++)
+    {
+        printf("%d", ints.items[i]);
+        if (i < ints.count - 1) printf(", ");
+    }
+    printf(" ] %d elements, %d capacity\n", ints.count, ints.capacity);
+};
 
 int main()
 {
-	testFloatComparison();
-	testLinkedLists();
-	testSeperateSections();
-	testWallReaction();
+	// testFloatComparison();
+	// testLinkedLists();
+	// testSeperateSections();
+	// testWallReaction();
+    // testSolveBeam();
 
+    Ints ints = {0};
+    for (int i = 0; i < 100; i++)
+    {
+        //DynamicArrayAppendInt(&ints, i);
+        DynamicArrayAppend(&ints, i);
+        if (i % 10 == 0) printInts(ints);
+    }
+
+    free(ints.items);
+    return 0;
+}
+void test(int condition, const char * fail_message)
+{
+	if (condition) printf(".");
+	else printf("F - %s\n", fail_message);
+}
+
+void testSolveBeam()
+{
 	printf("\nSolving beam:\n");
 	Beam beam = {0};
 	beam.length = 1.0;
@@ -59,11 +99,6 @@ int main()
 
 	printf("Moment:\n");
 	printStructArray(beam.moments, beam.sectionsCount, sizeof(Section), printSection);
-}
-void test(int condition, const char * fail_message)
-{
-	if (condition) printf(".");
-	else printf("F - %s\n", fail_message);
 }
 
 void testWallReaction()

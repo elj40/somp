@@ -25,11 +25,12 @@
 #define UTILS_IMPLEMENTATION
 #include "utils.h" // somp_logic.h depends on this so it should go first
 
+#define SOMP_LOGIC_IMPLEMENTATION
 #include "somp_logic.h"
 
 #include "SDL.h"
 
-#define WINDOW_SIZE_FACTOR 80
+#define WINDOW_SIZE_FACTOR 40
 #define WINDOW_WIDTH (16*WINDOW_SIZE_FACTOR)
 #define WINDOW_HEIGHT (9*WINDOW_SIZE_FACTOR)
 #define WINDOW_X 0
@@ -44,7 +45,6 @@ struct DownArrow
 };
 
 typedef struct DownArrow DownArrow;
-
 void renderDownArrow(SDL_Renderer* renderer, int x, int y, int size);
 
 int main(int argc, char * argv[])
@@ -82,14 +82,11 @@ int main(int argc, char * argv[])
 	printf("Hello SOMP\n");
 
 	bool program_finished = false;
-
 	bool mouse_pressed = false;
-	
 
 	SDL_Event event;
 	int mouseX, mouseY;
 	Uint32 mouseState;
-
 
 	Beam beam = {0};
 	beam.length = 1.0;
@@ -123,24 +120,15 @@ int main(int argc, char * argv[])
 			case SDL_QUIT: program_finished = true; break;
 			case SDL_KEYDOWN: 
 				       switch (event.key.keysym.sym) {
-				       case SDLK_ESCAPE:
-					       program_finished = true; break;
-				       case SDLK_SPACE:
-						printf("Raw:\n");
-						printStructArray(beam.raws, beam.sectionsCount, sizeof(Section), printSection);
-
-						printf("Shear:\n");
-						printStructArray(beam.shears, beam.sectionsCount, sizeof(Section), printSection);
-
-						printf("Moment:\n");
-						printStructArray(beam.moments, beam.sectionsCount, sizeof(Section), printSection);
-						break;
-
+                       case SDLK_ESCAPE:
+                           program_finished = true; break;
 				       }
 			}
 		}
 
 		mouseState = SDL_GetMouseState(&mouseX, &mouseY);
+
+        if (SDL_BUTTON(mouseState) == 1) printf("Clicked\n");
 
 		SDL_SetRenderDrawColor(pRenderer, 0,0,0, 255);
 		SDL_RenderClear(pRenderer);

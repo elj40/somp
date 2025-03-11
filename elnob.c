@@ -10,12 +10,11 @@ bool build_somp()
     // gcc -ggdb -o "somp.exe" somp.c somp_logic.c utils.c -L%SDL_PATH_LIB% -I%SDL_PATH_INCLUDE% -lmingw32 -lSDL2main -lSDL2 
     // somp.exe
 #define SDL_PATH_INCLUDE "/home/eli/Software/thirdparty/SDL-release-2.30.12/include/" 
-    printf("-I"SDL_PATH_INCLUDE"\n");
-    const char * compile[] = { "gcc", "-ggdb", "-o", "somp", "somp.c", "somp_logic.c", "utils.c", "-I"SDL_PATH_INCLUDE, "-lSDL2main", "-lSDL2", NULL }; 
+    // const char * compile[] = { "gcc", "-ggdb", "-o", "somp", "somp.c", "somp_logic.c", "utils.c", "-I"SDL_PATH_INCLUDE, "-lSDL2main", "-lSDL2", NULL }; 
+     const char * compile[] = { "gcc", "-ggdb", "-o", "somp", "somp.c", "-I"SDL_PATH_INCLUDE, "-lm", "-lSDL2main", "-lSDL2", NULL }; 
     if (!run_command_sync(ELNOB_ARRAY_SIZE(compile), compile)) return false;
     const char * run[] = { "./somp", NULL };
     if (!run_command_sync(ELNOB_ARRAY_SIZE(run), run)) return false;
-
     return true;
 }
 

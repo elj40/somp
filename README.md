@@ -22,3 +22,5 @@ The project will be done in SDL to make it a learning process, maybe it will be 
 * Make sure that the following are either in path or in the top directory:
     * `SDL2.dll`
     * `SDL2_ttf.dll`
+* Testing:
+    * ejtest: [](https://github.com/elj40/ejtest.git)

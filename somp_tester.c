@@ -17,6 +17,8 @@
 
 #define SOMP_LOGIC_IMPLEMENTATION
 #include "somp_logic.h"
+
+#include "ejtest.h"
  
 void test(int condition, const char * fail_message);
 void testLinkedLists();
@@ -24,6 +26,7 @@ void testFloatComparison();
 void testSeperateSections();
 void testWallReaction();
 void testSolveBeam();
+void testDynamicArrayAppend();
 
 typedef struct {
     int * items;
@@ -44,27 +47,35 @@ void printInts(Ints ints)
 
 int main()
 {
-	// testFloatComparison();
-	// testLinkedLists();
+	testFloatComparison();
+	testLinkedLists();
 	// testSeperateSections();
-	// testWallReaction();
+	testWallReaction();
     // testSolveBeam();
 
-    Ints ints = {0};
-    for (int i = 0; i < 100; i++)
-    {
-        //DynamicArrayAppendInt(&ints, i);
-        DynamicArrayAppend(&ints, i);
-        if (i % 10 == 0) printInts(ints);
-    }
 
-    free(ints.items);
+    testDynamicArrayAppend();
     return 0;
 }
 void test(int condition, const char * fail_message)
 {
 	if (condition) printf(".");
 	else printf("F - %s\n", fail_message);
+}
+
+void testDynamicArrayAppend()
+{
+    bool R = true;
+    Ints ints = {0};
+    for (int i = 0; i < 100; i++)
+    {
+        DynamicArrayAppend(&ints, i);
+        ejtest_expect_bool(&R, ints.count <= ints.capacity, true);
+        ejtest_expect_int( &R, ints.items[i], i);
+    }
+
+    free(ints.items);
+    ejtest_print_result("testDynamicArrayAppend", R);
 }
 
 void testSolveBeam()
@@ -103,7 +114,7 @@ void testSolveBeam()
 
 void testWallReaction()
 {
-	printf("Testing wall reaction:\n");
+    bool passed = true;
 	float wrf;
 
 	Section sections[] = {
@@ -113,27 +124,27 @@ void testWallReaction()
 	};
 
 	wrf = calculateWallReactionForce(sections, 3);
-	test(nearlyEqual(wrf, 6), "Incorrect wall reaction force (sum of point sources)");
+    ejtest_expect_float(&passed, wrf, 6.0);
 	//////////////////////////////////////////////
 
 	sections[0] = (Section){ .start = 0, .end = 1 };
 	sections[0].polynomial[0] = 1;
 
 	wrf = calculateWallReactionForce(sections, 1);
-	test(nearlyEqual(wrf, 1),"Incorrect wall reaction force (integral of y=1)"); 
+    ejtest_expect_float(&passed, wrf, 1.0);
 	/////////////////////////////////////////////
 	
 	sections[0] = (Section){ .start = 0, .end = 1 };
 	sections[0].polynomial[1] = 1;
 
 	wrf = calculateWallReactionForce(sections, 1);
-	test(nearlyEqual(wrf, 0.5),"Incorrect wall reaction force (integral of y=x)"); 
+    ejtest_expect_float(&passed, wrf, 0.5);
 	//////////////////////////////////////////////
 	sections[0] = (Section){ .start = 0, .end = 1 };
 	sections[0].polynomial[2] = 1;
 
 	wrf = calculateWallReactionForce(sections, 1);
-	test(nearlyEqual(wrf, 1.0/3.0),"Incorrect wall reaction force (integral of y=x^2), check MAX_POLYNOMIAL_DEGREE"); 
+    ejtest_expect_float(&passed, wrf, (1.0/3.0));
 	//////////////////////////////////////////////
 	sections[0] = (Section){ .start = 0, .end = 3 };
 	sections[1] = (Section){ .start = 0, .end = 2 };
@@ -144,13 +155,14 @@ void testWallReaction()
 	sections[2].polynomial[2] = 1;
 
 	wrf = calculateWallReactionForce(sections, 3);
-	test(nearlyEqual(wrf, (1.0/3.0) + 2.0 + 3.0),"Incorrect wall reaction force (sum of polys), check MAX_POLYNOMIAL_DEGREE"); 
-	printf("\n");
+    ejtest_expect_float(&passed, wrf, (1.0/3.0) + 2.0 + 3.0);
+	ejtest_print_result("testWallReaction", passed);
 }
 void testSeperateSections()
 {
 	printf("Section tests:\n");
 	TODO("Write more section tests");
+    TODO("Convert to ejtest tool");
 	int r = 1;
 
 	float beamLength = 1.0;
@@ -204,67 +216,53 @@ void testSeperateSections()
 }
 void testFloatComparison()
 {
-	printf("Floating point comparison tests\n");
+    bool R = true;
+
 	float a, b; 
-	int r;
 
 	a = 0.0;
 	b = 0.0;
-	r = nearlyEqual(a, b);
-	if (r) printf(".");
-	else printf("F (%d): 0 ~= 0\n", r);
+    ejtest_expect_bool(&R, nearlyEqual(a, b), true);
 
 	a = 0.25;
 	b = 0.0;
-	r = nearlyEqual(a, b);
-	if (!r) printf(".");
-	else printf("F (%d): 0.25 != 0.0\n", r);
+    ejtest_expect_bool(&R, nearlyEqual(a, b), false);
 
-	printf("\n");
+    ejtest_print_result("testFloatComparison", R);
 }
 void testLinkedLists()
 {
+    bool R = true;
+
 	LL_Node * test;
-	int result;
-	printf("Linked list tests:\n");
 	int list[] = {1,2,3,4,5,6};
 	LL_Node * intLL = NULL;
+
 	for (int i = 0; i < 5; i++)
 	{
 		LL_push(&intLL, list + i);
 	}
+
 	//Succesfully pushed
 	test = intLL;
-	result = 1;
 	for (int i = 0; i < 5; i++)
 	{
-		if (*((int *)(test->data)) != list[i]) result=0;
+        ejtest_expect_int(&R, *((int *)(test->data)), list[i]);
 		test = test->next;
 	}
-	if (result) printf(".");
-	else printf("\nF: Push failed\n");
 
 	// Remove head
-	result = 1;
 	LL_remove(&intLL, list);
-	if (*((int*)intLL->data) != list[1]) result = 0; 
-	if (result) printf(".");
-	else printf("\nF: Remove head failed\n");
+    ejtest_expect_int(&R, *((int *)(intLL->data)), list[1]);
 
 	// Remove 2nd
-	result = 1;
 	LL_remove(&intLL, list+2);
-	if (*((int*)intLL->next->data) != list[3]) result = 0; 
-	if (result) printf(".");
-	else printf("\nF: Remove 2nd failed\n");
+	ejtest_expect_int(&R, *((int*)intLL->next->data), list[3]); 
 
 	//Remove all
-	result = 1;
 	while (intLL) LL_remove(&intLL, intLL->data);
-	if (intLL) result = 0;
-	if (result) printf(".");
-	else printf("\nF: Remove all failed\n");
+	ejtest_expect_bool(&R, intLL, false); 
 
-	printf("\n");
 	LL_free(intLL);
+    ejtest_print_result("testLinkedLists", R);
 }

@@ -82,15 +82,18 @@ bool solveBeam(Beam * beam,
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <math.h>
 
-int compSections(Section a, Section b) 
+bool comp_sections(void * a, void * b) 
 {
-	if (!nearlyEqual(a.start, b.start)) return 0;
-	if (!nearlyEqual(a.end, b.end)) return 0;
-	if (!nearlyEqual(a.pointForce, b.pointForce)) return 0;
+    Section * A = (Section *) a;
+    Section * B = (Section *) b;
+	if (!nearly_equal(A->start, B->start)) return false;
+	if (!nearly_equal(A->end, B->end)) return false;
+	if (!nearly_equal(A->pointForce, B->pointForce)) return false;
 
-	return 1;
+	return true;
 }
 
 
@@ -274,7 +277,7 @@ bool seperateBeamIntoSections(float beamLength,
 		{
 			// POINT FORCE
 			// Create new section
-			int x = !nearlyEqual(pF[iPF].distance, sections[iSection].start);
+			int x = !nearly_equal(pF[iPF].distance, sections[iSection].start);
 			if (x)
 			{
 			sections[iSection].end = pF[iPF].distance;
@@ -293,7 +296,7 @@ bool seperateBeamIntoSections(float beamLength,
 		{
 			// START
 			// Create new section
-			if (!nearlyEqual(dFS[iDS]->start, sections[iSection].start))
+			if (!nearly_equal(dFS[iDS]->start, sections[iSection].start))
 			{
 			sections[iSection].end = dFS[iDS]->start;
 

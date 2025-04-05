@@ -49,9 +49,9 @@ int main()
 {
 	testFloatComparison();
 	testLinkedLists();
-	// testSeperateSections();
+	testSeperateSections();
 	testWallReaction();
-    // testSolveBeam();
+    testSolveBeam();
 
 
     testDynamicArrayAppend();
@@ -80,7 +80,7 @@ void testDynamicArrayAppend()
 
 void testSolveBeam()
 {
-	printf("\nSolving beam:\n");
+    bool R = true;
 	Beam beam = {0};
 	beam.length = 1.0;
 	beam.sectionsCount = MAX_SECTIONS;
@@ -102,14 +102,41 @@ void testSolveBeam()
 	dfCount = 4;
 	solveBeam(&beam, pointForces, pfCount, distributedForces, dfCount);
 
-	printf("Raw:\n");
-	printStructArray(beam.raws, beam.sectionsCount, sizeof(Section), printSection);
+    Section expected_raw[] = {
+        { .start = 0.000, .end = 0.250, .pointForce = 1.000, .polynomial = {1.00, 0.00, 0.00, 0.00}},
+        { .start = 0.250, .end = 0.500, .pointForce = 2.000, .polynomial = {3.00, 0.00, 0.00, 0.00}},
+        { .start = 0.500, .end = 0.650, .pointForce = 3.000, .polynomial = {2.00, 0.00, 0.00, 0.00}},
+        { .start = 0.650, .end = 0.750, .pointForce = 0.000, .polynomial = {6.00, 0.00, 0.00, 0.00}},
+        { .start = 0.750, .end = 0.950, .pointForce = 0.000, .polynomial = {7.00, 0.00, 0.00, 0.00}},
+        { .start = 0.950, .end = 1.000, .pointForce = 0.000, .polynomial = {3.00, 0.00, 0.00, 0.00}},
+    };
+    Section expected_shear[] = {
+        { .start = 0.000, .end = 0.250, .pointForce = 0.000, .polynomial = {8.45, -1.00, -0.00, -0.00}},
+        { .start = 0.250, .end = 0.500, .pointForce = 0.000, .polynomial = {6.95, -3.00, -0.00, -0.00}},
+        { .start = 0.500, .end = 0.650, .pointForce = 0.000, .polynomial = {3.45, -2.00, -0.00, -0.00}},
+        { .start = 0.650, .end = 0.750, .pointForce = 0.000, .polynomial = {6.05, -6.00, -0.00, -0.00}},
+        { .start = 0.750, .end = 0.950, .pointForce = 0.000, .polynomial = {6.80, -7.00, -0.00, -0.00}},
+        { .start = 0.950, .end = 1.000, .pointForce = 0.000, .polynomial = {3.00, -3.00, -0.00, -0.00}},
+    };
+    Section expected_moment[] = {
+        { .start = 0.000, .end = 0.250, .pointForce = 0.000, .polynomial = {-4.24, 8.45, -0.50, -0.00}},
+        { .start = 0.250, .end = 0.500, .pointForce = 0.000, .polynomial = {-3.80, 6.95, -1.50, -0.00}},
+        { .start = 0.500, .end = 0.650, .pointForce = 0.000, .polynomial = {-2.18, 3.45, -1.00, -0.00}},
+        { .start = 0.650, .end = 0.750, .pointForce = 0.000, .polynomial = {-3.02, 6.05, -3.00, -0.00}},
+        { .start = 0.750, .end = 0.950, .pointForce = 0.000, .polynomial = {-3.30, 6.80, -3.50, -0.00}},
+        { .start = 0.950, .end = 1.000, .pointForce = 0.000, .polynomial = {-1.50, 3.00, -1.50, -0.00}},
+    };
 
-	printf("Shear:\n");
-	printStructArray(beam.shears, beam.sectionsCount, sizeof(Section), printSection);
+    ejtest_expect_int(&R, ArrayCount(expected_raw), beam.sectionsCount);
 
-	printf("Moment:\n");
-	printStructArray(beam.moments, beam.sectionsCount, sizeof(Section), printSection);
+    for (int i = 0; i < beam.sectionsCount; i++)
+    {
+        ejtest_expect_struct(&R, beam.raws[i], expected_raw[i], comp_sections);
+        ejtest_expect_struct(&R, beam.shears[i], expected_shear[i], comp_sections);
+        ejtest_expect_struct(&R, beam.moments[i], expected_moment[i], comp_sections);
+    };
+
+    ejtest_print_result("testSolveBeam", R);
 }
 
 void testWallReaction()
@@ -160,10 +187,8 @@ void testWallReaction()
 }
 void testSeperateSections()
 {
-	printf("Section tests:\n");
 	TODO("Write more section tests");
-    TODO("Convert to ejtest tool");
-	int r = 1;
+    bool R = true;
 
 	float beamLength = 1.0;
 	int pfCount = 0;
@@ -186,7 +211,6 @@ void testSeperateSections()
 	dfCount = 4;
 
 	seperateBeamIntoSections(beamLength, pForces, pfCount, dForces, dfCount, sections, &sectionsCount);
-	/* printStructArray(sections, sectionsCount, sizeof(Section), printSection); */
 
 	Section expectedSections[] = {
 		(Section){ .start = 0.000000, .end = 0.250000, .pointForce =  1.000000 },
@@ -197,22 +221,19 @@ void testSeperateSections()
 		(Section){ .start = 0.950000, .end = 1.000000, .pointForce =  0.000000 },
 	};
 
-	if (sectionsCount == ArrayCount(expectedSections)) printf(".");
-	else printf("F - wrong number of sections\n");
+    ejtest_expect_int(&R, ArrayCount(expectedSections), sectionsCount);
 
 	for (int i = 0; i < sectionsCount; i++)
 	{
-		if (!compSections(sections[i], expectedSections[i]))
+        ejtest_expect_struct(&R, sections[i], expectedSections[i], comp_sections);
+		if (!comp_sections(&sections[i], &expectedSections[i]))
 		{
-			printf("F - Section does not match expected section:\n");
 			printf("Found:    "); printSection(&sections[i]);
 			printf("Expected: "); printSection(&expectedSections[i]);
-			r = 0;
 		} 
 	}
-	if (r) printf(".");
 
-	printf("\n");
+    ejtest_print_result("testSeperateSections", R);
 }
 void testFloatComparison()
 {
@@ -222,11 +243,11 @@ void testFloatComparison()
 
 	a = 0.0;
 	b = 0.0;
-    ejtest_expect_bool(&R, nearlyEqual(a, b), true);
+    ejtest_expect_bool(&R, nearly_equal(a, b), true);
 
 	a = 0.25;
 	b = 0.0;
-    ejtest_expect_bool(&R, nearlyEqual(a, b), false);
+    ejtest_expect_bool(&R, nearly_equal(a, b), false);
 
     ejtest_print_result("testFloatComparison", R);
 }

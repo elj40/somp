@@ -39,7 +39,7 @@ int ArrayMax(int nums[], int n);
 float ArrayMaxf(float nums[], int n);
 
 // Misc
-int nearlyEqual(float a, float b);
+int nearly_equal(float a, float b);
 void printInt(const void * i);
 
 // Generic linked list operations
@@ -74,7 +74,7 @@ float ArrayMaxf(float nums[], int n)
 	return max;
 }
 
-int nearlyEqual(float a, float b)
+int nearly_equal(float a, float b)
 {
 	return fabs(a - b) < EPSILON;
 }

@@ -1,6 +1,8 @@
 #ifndef _ELNOB_H_
 #define _ELNOB_H_
 
+#define ELNOB_VERSION 1.0.0
+
 #define ELNOB_ARRAY_SIZE(a) sizeof((a))/sizeof((a)[0])
 int run_command_sync(int argc, const char * argv[]);
 

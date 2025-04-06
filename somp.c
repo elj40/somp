@@ -28,13 +28,6 @@
 #define SOMP_LOGIC_IMPLEMENTATION
 #include "somp_logic.h"
 
-void read_beam_info(Beam * beam);
-void read_pointforce_info(PointForce pfs[]);
-void read_distributedforce_info(DistributedForce dfs[]);
-
-void read_beam_info(Beam * beam) {}
-void read_pointforce_info(PointForce pfs[]) {}
-void read_distributedforce_info(DistributedForce dfs[]) {}
 
 int main(int argc, char * argv[])
 {

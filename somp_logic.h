@@ -96,6 +96,37 @@ bool comp_sections(void * a, void * b)
 	return true;
 }
 
+bool comp_pointforces(void * a, void * b) 
+{
+    if (a == NULL && b == NULL) return true;
+    if (a == NULL && b != NULL) return false;
+    if (a != NULL && b == NULL) return false;
+    PointForce * A = (PointForce *) a;
+    PointForce * B = (PointForce *) b;
+	if (!nearly_equal(A->distance, B->distance)) return false;
+	if (!nearly_equal(A->force, B->force)) return false;
+
+	return true;
+}
+
+bool comp_distribforces(void * a, void * b) 
+{
+    if (a == NULL && b == NULL) return true;
+    if (a == NULL && b != NULL) return false;
+    if (a != NULL && b == NULL) return false;
+    DistributedForce * A = (DistributedForce *) a;
+    DistributedForce * B = (DistributedForce *) b;
+	if (!nearly_equal(A->start, B->start)) return false;
+	if (!nearly_equal(A->end, B->end)) return false;
+
+
+    for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
+    {
+        if (!nearly_equal(A->polynomial[i], B->polynomial[i])) return false;
+    }
+
+	return true;
+}
 
 void printSection(const void * vp)
 {

@@ -18,21 +18,39 @@
 #define SOMP_LOGIC_IMPLEMENTATION
 #include "somp_logic.h"
 
+#define SOMP_IO_IMPLEMENTATION
+#include "somp_io.h"
+
 #include "ejtest.h"
  
-void test(int condition, const char * fail_message);
 void testLinkedLists();
 void testFloatComparison();
 void testSeperateSections();
 void testWallReaction();
 void testSolveBeam();
 void testDynamicArrayAppend();
+void testReadInput();
 
 typedef struct {
     int * items;
     int capacity;
     int count;
 } Ints;
+
+typedef struct PointForces PointForces;
+typedef struct DistributedForces DistributedForces;
+
+struct PointForces {
+    PointForce * items;
+    int count;
+    int capacity;
+};
+
+struct DistributedForces{
+    DistributedForce * items;
+    int count;
+    int capacity;
+};
 
 void printInts(Ints ints)
 {
@@ -52,17 +70,77 @@ int main()
 	testSeperateSections();
 	testWallReaction();
     testSolveBeam();
-
+    testReadInput();
 
     testDynamicArrayAppend();
     return 0;
 }
-void test(int condition, const char * fail_message)
-{
-	if (condition) printf(".");
-	else printf("F - %s\n", fail_message);
-}
 
+void testReadInput()
+{
+    bool R = true;
+
+    Beam beam = {0}; 
+    Beam expected_beam = {0};
+    PointForces point_forces = {0};
+    PointForces expected_point_forces = {0};
+    DistributedForces distrib_forces = {0};
+    DistributedForces expected_distrib_forces = {0};
+
+    char buffer [] = \
+	    "#B\n"           \
+        "1.0 10\n"          \
+        "#PF\n" \
+        "4\n" \
+        "0.0  1\n" \
+        "0.25 2\n" \
+        "0.5  3\n" \
+        "1.0  4\n" \
+        "#DF\n" \
+        "4\n" \
+        "0, 0.5, [1,0]\n" \
+        "0.25, 0.75, [2,0]\n" \
+        "0.75, 1.0, [3,0]\n" \
+        "0.65, 0.95, [4,0]\n";
+
+	expected_beam.length = 1.0;
+	expected_beam.sectionsCount = 10;
+
+    DynamicArrayAppend(&expected_point_forces, ((PointForce) { 0.0, 1 }));
+	DynamicArrayAppend(&expected_point_forces, ((PointForce) { 0.25,2 }));
+	DynamicArrayAppend(&expected_point_forces, ((PointForce) { 0.5, 3 }));
+	DynamicArrayAppend(&expected_point_forces, ((PointForce) { 1.0, 4 }));
+
+	DynamicArrayAppend(&expected_distrib_forces, ((DistributedForce){ 0, 0.5, {1,0} }));
+	DynamicArrayAppend(&expected_distrib_forces, ((DistributedForce){ 0.25, 0.75, {2,0} }));
+	DynamicArrayAppend(&expected_distrib_forces, ((DistributedForce){ 0.75, 1.0, {3,0} }));
+	DynamicArrayAppend(&expected_distrib_forces, ((DistributedForce){ 0.65, 0.95, {4,0} }));
+
+    assert(expected_point_forces.count == expected_distrib_forces.count);
+
+    FILE * input_stream = fmemopen (buffer, sizeof(buffer), "r");
+    read_info_cli(input_stream, &beam, &point_forces, &distrib_forces);
+    fclose(input_stream);
+    
+    ejtest_expect_float(&R, beam.length, expected_beam.length);
+    ejtest_expect_int(&R, beam.sectionsCount, expected_beam.sectionsCount);
+
+    if (!ejtest_expect_int(&R, point_forces.count, expected_point_forces.count)
+            || !ejtest_expect_int(&R, distrib_forces.count, expected_distrib_forces.count))
+    {
+        ejtest_print_result("testReadInput", R);
+        return;
+    }
+    
+
+    for (int i = 0; i < expected_point_forces.count; i++)
+    {
+        printf("%d\n", i);
+        ejtest_expect_struct(&R, point_forces.items[i], expected_point_forces.items[i], comp_pointforces);
+        ejtest_expect_struct(&R, distrib_forces.items[i], expected_distrib_forces.items[i], comp_distribforces);
+    }
+    ejtest_print_result("testReadInput", R);
+};
 void testDynamicArrayAppend()
 {
     bool R = true;
@@ -187,7 +265,7 @@ void testWallReaction()
 }
 void testSeperateSections()
 {
-	TODO("Write more section tests");
+	//TODO("Write more section tests");
     bool R = true;
 
 	float beamLength = 1.0;

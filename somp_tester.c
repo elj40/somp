@@ -30,27 +30,15 @@ void testWallReaction();
 void testSolveBeam();
 void testDynamicArrayAppend();
 void testReadInput();
+void testReadBeamInput();
+void testReadPointforceInput();
+void testReadDistribforceInput();
 
 typedef struct {
     int * items;
     int capacity;
     int count;
 } Ints;
-
-typedef struct PointForces PointForces;
-typedef struct DistributedForces DistributedForces;
-
-struct PointForces {
-    PointForce * items;
-    int count;
-    int capacity;
-};
-
-struct DistributedForces{
-    DistributedForce * items;
-    int count;
-    int capacity;
-};
 
 void printInts(Ints ints)
 {
@@ -70,10 +58,110 @@ int main()
 	testSeperateSections();
 	testWallReaction();
     testSolveBeam();
+    testReadBeamInput();
+    testReadPointforceInput();
+    testReadDistribforceInput();
     testReadInput();
 
     testDynamicArrayAppend();
     return 0;
+}
+
+void testReadBeamInput()
+{
+    bool R = true;
+
+    char line [] = "1.0 10\n";
+    Beam beam = {0};
+    Beam expected_beam = { 0 };
+    expected_beam.length = 1.0;
+    expected_beam.sectionsCount = 10;
+
+    read_beam_info_cli(line, &beam);
+    
+    ejtest_expect_float(&R, beam.length, expected_beam.length);
+    ejtest_expect_int(&R, beam.sectionsCount, expected_beam.sectionsCount);
+
+    ejtest_print_result("testReadBeamInput", R);
+}
+void testReadPointforceInput()
+{
+    bool R = true;
+    bool ret = false;
+    PointForce p = {0};
+
+    char line1[] = "0.0  1\n";
+    ret = read_pointforce_info_cli(line1, &p);
+    ejtest_expect_bool(&R, ret, true);
+    ejtest_expect_float(&R, p.distance, 0.0);
+    ejtest_expect_float(&R, p.force, 1.0);
+
+    char line2[] = "0.25 2\n";
+    ret = read_pointforce_info_cli(line2, &p);
+    ejtest_expect_bool(&R, ret, true);
+    ejtest_expect_float(&R, p.distance, 0.25);
+    ejtest_expect_float(&R, p.force, 2.0);
+
+    char line3[] = "0.5  3\n";
+    ret = read_pointforce_info_cli(line3, &p);
+    ejtest_expect_bool(&R, ret, true);
+    ejtest_expect_float(&R, p.distance, 0.5);
+    ejtest_expect_float(&R, p.force, 3.0);
+
+    char line4[] = "1.0  4\n";
+    ret = read_pointforce_info_cli(line4, &p);
+    ejtest_expect_bool(&R, ret, true);
+    ejtest_expect_float(&R, p.distance, 1.0);
+    ejtest_expect_float(&R, p.force, 4.0);
+
+    char line5[] = "1.0                 4\n";
+    ret = read_pointforce_info_cli(line5, &p);
+    ejtest_expect_bool(&R, ret, true);
+    ejtest_expect_float(&R, p.distance, 1.0);
+    ejtest_expect_float(&R, p.force, 4.0);
+
+    ejtest_print_result("testReadPointforceInput", R);
+}
+void testReadDistribforceInput()
+{
+    bool R = true;
+    bool ret = false;
+    DistributedForce d = {0};
+    DistributedForce expected_d = {0};
+
+    char line1[] = "0 0.5 [1 0]\n";
+    expected_d = (DistributedForce){ .start=0, .end=0.5, .polynomial={1, 0}};
+    ret = read_distributedforce_info_cli(line1, &d);
+    ejtest_expect_bool(&R, ret, true);
+    ejtest_expect_struct(&R, d, expected_d, comp_distribforces);
+
+    char line2[] = "0.25 0.75 [2 0]\n";
+    expected_d = (DistributedForce){ .start=0.25, .end=0.75, .polynomial={2, 0}};
+    ret = read_distributedforce_info_cli(line2, &d);
+    ejtest_expect_bool(&R, ret, true);
+    ejtest_expect_struct(&R, d, expected_d, comp_distribforces);
+
+    char line3[] = "0.75 1.0 [3 1 2]\n";
+    expected_d = (DistributedForce){ .start=0.75, .end=1.0, .polynomial={3, 1, 2, 0}};
+    ret = read_distributedforce_info_cli(line3, &d);
+    ejtest_expect_bool(&R, ret, true);
+    ejtest_expect_struct(&R, d, expected_d, comp_distribforces);
+
+    char line4[] = "0.65 0.9598709707 [4 0]\n";
+    expected_d = (DistributedForce){ .start=0.65, .end=0.9598709707, .polynomial={4, 0}};
+    ret = read_distributedforce_info_cli(line4, &d);
+    ejtest_expect_bool(&R, ret, true);
+    ejtest_expect_struct(&R, d, expected_d, comp_distribforces);
+
+    char line5[] = "0.65 0.95\n";
+    ret = read_distributedforce_info_cli(line5, &d);
+    ejtest_expect_bool(&R, ret, false);
+    
+    char line6[] = "";
+    ret = read_distributedforce_info_cli(line6, &d);
+    ejtest_expect_bool(&R, ret, false);
+
+    ejtest_print_result("testReadDistribforceInput", R);
 }
 
 void testReadInput()
@@ -98,10 +186,10 @@ void testReadInput()
         "1.0  4\n" \
         "#DF\n" \
         "4\n" \
-        "0, 0.5, [1,0]\n" \
-        "0.25, 0.75, [2,0]\n" \
-        "0.75, 1.0, [3,0]\n" \
-        "0.65, 0.95, [4,0]\n";
+        "0 0.5 [1 0]\n" \
+        "0.25 0.75 [2 0]\n" \
+        "0.75 1.0 [3 0]\n" \
+        "0.65 0.95 [4 0]\n";
 
 	expected_beam.length = 1.0;
 	expected_beam.sectionsCount = 10;
@@ -135,7 +223,6 @@ void testReadInput()
 
     for (int i = 0; i < expected_point_forces.count; i++)
     {
-        printf("%d\n", i);
         ejtest_expect_struct(&R, point_forces.items[i], expected_point_forces.items[i], comp_pointforces);
         ejtest_expect_struct(&R, distrib_forces.items[i], expected_distrib_forces.items[i], comp_distribforces);
     }

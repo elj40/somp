@@ -30,6 +30,21 @@ struct DistributedForce
 };
 typedef struct DistributedForce DistributedForce;
 
+typedef struct PointForces PointForces;
+typedef struct DistributedForces DistributedForces;
+
+struct PointForces {
+    PointForce * items;
+    int count;
+    int capacity;
+};
+
+struct DistributedForces{
+    DistributedForce * items;
+    int count;
+    int capacity;
+};
+
 struct Section
 {
 	float start;
@@ -150,7 +165,13 @@ void printPF(const void * vp)
 void printDF(const void * vd)
 {
 	DistributedForce * d = (DistributedForce *) vd;
-	printf("DistributedForce:: start: %f, end: %f, coeff0: %f\n", d->start, d->end, d->polynomial[0]);
+	printf("DistributedForce:: start: %.3f, end: %.3f, poly: [", d->start, d->end);
+    for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
+    {
+        printf(" %.3f", d->polynomial[i]);
+        if (i < MAX_POLYNOMIAL_DEGREE-1) printf(",");
+    };
+    printf("]\n");
 }
 
 // print a DistributedForce from pointer

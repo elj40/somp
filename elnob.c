@@ -16,9 +16,9 @@ bool build_somp()
 
 bool build_tests()
 {
-    const char * compile[] = { "gcc","-Wall","-Wextra","-ggdb","-o","tester","somp_tester.c","-lm", NULL };
+    const char * compile[] = { "gcc","-Wall","-Wextra","-ggdb","-o","tester.out","somp_tester.c","-lm", NULL };
     if (!run_command_sync(ELNOB_ARRAY_SIZE(compile), compile)) return false;
-    const char * run[] = { "./tester", NULL };
+    const char * run[] = { "./tester.out", NULL };
     if (!run_command_sync(ELNOB_ARRAY_SIZE(run), run)) return false;
 
     return true;

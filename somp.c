@@ -28,42 +28,52 @@
 #define SOMP_LOGIC_IMPLEMENTATION
 #include "somp_logic.h"
 
+#define SOMP_IO_IMPLEMENTATION
+#include "somp_io.h"
 
 int main(int argc, char * argv[])
 {
-	printf("Hello SOMP\n");
+	printf("Welcome to SOMP!\n");
+	printf("SOMP calculates the internal shear stress and bending moments in cantilever beams\n");
+    printf("Formatting rules:\n");
+    printf("\tNormal text - write it exactly as shown\n");
+    printf("\t(Bracketed) - descriptions, do NOT write\n");
+    printf("\t[Squared  ] - must write, but use your own values\n");
+    printf("Example input:\n");
+	printf("\t#B\n");
+    printf("\t1.0 10\n");
+    printf("\t#PF\n");
+    printf("\t4\n");
+    printf("\t0.0  1\n");
+    printf("\t0.25 2\n");
+    printf("\t0.5  3\n");
+    printf("\t1.0  4\n");
+    printf("\t#DF\n");
+    printf("\t4\n");
+    printf("\t0 0.5 [1 0]\n");
+    printf("\t0.25 0.75 [2 0]\n");
+    printf("\t0.75 1.0 [3 0]\n");
+    printf("\t0.65 0.95 [4 0]\n");
 
-    // Get beam data from user
-    //      beam length
-    //      point forces
-    //      distributed forces
-	Beam beam = {0};
-	beam.length = 1.0;
-	beam.sectionsCount = MAX_SECTIONS;
+    Beam beam = {0};
+    PointForces point_forces = {0};
+    DistributedForces distrib_forces = {0};
+    //input
+    printf("Enter your input:\n");
+    while (true)
+    {
+        if (read_info_cli(stdin, &beam, &point_forces, &distrib_forces)) break;
+        printf("\nCould not parse input! Please type it again.\n");   
+        printf("Enter your input:\n");
+    };
+    //solve
+    solveBeam(&beam, point_forces.items, point_forces.count, distrib_forces.items, distrib_forces.count);
+    //output
+    printf("\nOutput:\n");
 
-	PointForce point_forces[10]; //TODO: figure out how many we should allocate for
-	int pfCount;
-	point_forces[0] = (PointForce){ 0.0, 1 };
-	point_forces[1] = (PointForce){ 0.25,2 };
-	point_forces[2] = (PointForce){ 0.5, 3 };
-	point_forces[3] = (PointForce){ 1.0, 4 };
-	pfCount = 4;
-
-	DistributedForce distributed_forces[10];
-	int dfCount;
-	distributed_forces[0] = (DistributedForce){ 0, 0.5, {1,0} };
-	distributed_forces[1] = (DistributedForce){ 0.25, 0.75, {2,0} };
-	distributed_forces[2] = (DistributedForce){ 0.75, 1.0, {3,0} };
-	distributed_forces[3] = (DistributedForce){ 0.65, 0.95, {4,0} };
-	dfCount = 4;
-
-    read_beam_info(&beam);
-    read_pointforce_info(point_forces);
-    read_distributedforce_info(distributed_forces);
-    // Solve beam
-	solveBeam(&beam, point_forces, pfCount, distributed_forces, dfCount);
-
-    // Ouput beam results
+    printStructArray(beam.raws, beam.sectionsCount, sizeof(beam.raws[0]), printSection );
+    printStructArray(beam.shears, beam.sectionsCount, sizeof(beam.shears[0]), printSection );
+    printStructArray(beam.moments, beam.sectionsCount, sizeof(beam.moments[0]), printSection );
 
 	return 0;
 }

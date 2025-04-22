@@ -7,9 +7,9 @@
 
 bool build_somp()
 {
-    const char * compile[] = { "gcc", "-ggdb", "-o", "somp", "somp.c","-lm", NULL }; 
+    const char * compile[] = { "gcc", "-ggdb", "-o", "somp.out", "somp.c","-lm", NULL }; 
     if (!run_command_sync(ELNOB_ARRAY_SIZE(compile), compile)) return false;
-    const char * run[] = { "./somp", NULL };
+    const char * run[] = { "./somp.out", NULL };
     if (!run_command_sync(ELNOB_ARRAY_SIZE(run), run)) return false;
     return true;
 }

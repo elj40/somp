@@ -65,13 +65,13 @@ typedef struct Beam Beam;
 
 void integratePolynomial(float dest[MAX_POLYNOMIAL_DEGREE], const float src[MAX_POLYNOMIAL_DEGREE]);
 float evalPolynomial(float x, float poly[MAX_POLYNOMIAL_DEGREE]);
-int compSections(Section a, Section b);
 void printSection(const void * vp);
 void printPF(const void * vp);
 void printDF(const void * vd);
 void printDFptr(const void * vd);
 void printStructArray(const void * arr, int count, int size, void (* printStruct)(const void *) );
 void LL_SumDistributedPolynomials(LL_Node * head, float poly[]);
+int compSections(Section a, Section b);
 int compPointDists(const void * a, const void * b);
 int compDistributedStartsPtr(const void * a, const void * b);
 int compDistributedStarts(const void * a, const void * b);
@@ -100,6 +100,17 @@ bool solveBeam(Beam * beam,
 #include <stdbool.h>
 #include <math.h>
 
+/// FROM STACKOVERFLOW: Daniel Gehriger at 
+/// https://stackoverflow.com/questions/13094224/a-c-routine-to-round-a-float-to-n-significant-digits
+double round_to_digits(double value, int digits)
+{
+    if (value == 0.0) // otherwise it will return 'nan' due to the log10() of zero
+        return 0.0;
+
+    double factor = pow(10.0, digits - ceil(log10(fabs(value))));
+    return round(value * factor) / factor;   
+}
+
 bool comp_sections(void * a, void * b) 
 {
     Section * A = (Section *) a;
@@ -107,6 +118,13 @@ bool comp_sections(void * a, void * b)
 	if (!nearly_equal(A->start, B->start)) return false;
 	if (!nearly_equal(A->end, B->end)) return false;
 	if (!nearly_equal(A->pointForce, B->pointForce)) return false;
+
+    for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
+    {
+        float term_A = round_to_digits(A->polynomial[i], 3);
+        float term_B = round_to_digits(B->polynomial[i], 3);
+        if (!nearly_equal(term_A, term_B)) return false;
+    }
 
 	return true;
 }
@@ -320,6 +338,9 @@ bool seperateBeamIntoSections(float beamLength,
 		// control
 		//
 		// A better approach would be appreciated
+        //
+        // BIG WHOOPS HERE!!!
+        // We still get a segfault if there are zero point forces 
 		
 		int P_less_S = (iDS < dfCount) ? pF[iPF].distance < dFS[iDS]->start : 1;
 		int P_less_E = (iDE < dfCount) ? pF[iPF].distance < dFE[iDE]->end : 1;

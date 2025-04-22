@@ -63,29 +63,34 @@ struct Beam {
 };
 typedef struct Beam Beam;
 
-void integratePolynomial(float dest[MAX_POLYNOMIAL_DEGREE], const float src[MAX_POLYNOMIAL_DEGREE]);
+
 float evalPolynomial(float x, float poly[MAX_POLYNOMIAL_DEGREE]);
+void integratePolynomial(float dest[MAX_POLYNOMIAL_DEGREE], const float src[MAX_POLYNOMIAL_DEGREE]);
+
 void printSection(const void * vp);
 void printPF(const void * vp);
 void printDF(const void * vd);
 void printDFptr(const void * vd);
 void printStructArray(const void * arr, int count, int size, void (* printStruct)(const void *) );
+void printPolynomial(float p[MAX_POLYNOMIAL_DEGREE]);
+
 void LL_SumDistributedPolynomials(LL_Node * head, float poly[]);
+
+bool comp_sections(void * a, void * b);
 int compSections(Section a, Section b);
 int compPointDists(const void * a, const void * b);
 int compDistributedStartsPtr(const void * a, const void * b);
 int compDistributedStarts(const void * a, const void * b);
 int compDistributedEnds(const void * a, const void * b);
 int compDistributedEndsPtr(const void * a, const void * b);
+
 bool seperateBeamIntoSections(float beamLength,
 		PointForce pForces[],       int pfCount, 
 		DistributedForce dForces[], int dfCount, 
 		Section sections[],         int * sectionsCount);
-void printPolynomial(float p[MAX_POLYNOMIAL_DEGREE]);
 float calculateWallReactionMoment(Section sections[], int sectionsCount);
 float calculateWallReactionForce(Section sections[], int sectionsCount);
-float evalPolynomial(float x, float poly[MAX_POLYNOMIAL_DEGREE]);
-void integratePolynomial(float dest[MAX_POLYNOMIAL_DEGREE], const float src[MAX_POLYNOMIAL_DEGREE]);
+
 void solveShearSections(Section shear[], Section raw[], int count);
 void solveMomentSections(Section moment[], Section shear[], Section raw[], int count);
 bool solveBeam(Beam * beam,
@@ -95,8 +100,8 @@ bool solveBeam(Beam * beam,
 #ifdef SOMP_LOGIC_IMPLEMENTATION
 
 #include <stdlib.h>
+#include <stdio.h>  
 #include <string.h>
-#include <stdio.h>
 #include <stdbool.h>
 #include <math.h>
 
@@ -109,6 +114,23 @@ double round_to_digits(double value, int digits)
 
     double factor = pow(10.0, digits - ceil(log10(fabs(value))));
     return round(value * factor) / factor;   
+}
+
+bool comp_beams(void * a, void * b) 
+{
+    Beam * A = (Beam *) a;
+    Beam * B = (Beam *) b;
+	if (!nearly_equal(A->length, B->length)) return false;
+	if (A->sectionsCount != B->sectionsCount) return false;
+
+    for (int j = 0; j < A->sectionsCount; j++)
+    {
+        if (!comp_sections(&A->raws[j], &B->raws[j])) return false;
+        if (!comp_sections(&A->shears[j], &B->shears[j])) return false;
+        if (!comp_sections(&A->moments[j], &B->moments[j])) return false;
+    }
+
+	return true;
 }
 
 bool comp_sections(void * a, void * b) 
@@ -400,7 +422,9 @@ bool seperateBeamIntoSections(float beamLength,
 		}
 	}
 
-	if (iSection >= *sectionsCount) return false;
+    // This is to make sure we do not exceed the amount memory allocated, but
+    // since we plan on using dynamic arrays it should become obsolete
+	if (*sectionsCount > 0 && iSection >= *sectionsCount) return false;
 
 	// make sure sections cover only/entirely the beam
 	if (sections[iSection].start < beamLength) sections[iSection].end = beamLength;

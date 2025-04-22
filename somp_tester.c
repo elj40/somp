@@ -27,12 +27,16 @@ void testLinkedLists();
 void testFloatComparison();
 void testSeperateSections();
 void testWallReaction();
+void testCompBeams();
+void testSolveBeamEmpty();
 void testSolveBeam();
 void testDynamicArrayAppend();
 void testReadInput();
 void testReadBeamInput();
 void testReadPointforceInput();
 void testReadDistribforceInput();
+
+void testExample_6_2();
 
 typedef struct {
     int * items;
@@ -57,16 +61,48 @@ int main()
 	testLinkedLists();
 	testSeperateSections();
 	testWallReaction();
+    testCompBeams();
+    testSolveBeamEmpty();
     testSolveBeam();
     testReadBeamInput();
     testReadPointforceInput();
     testReadDistribforceInput();
     testReadInput();
+    testExample_6_2();
 
     testDynamicArrayAppend();
     return 0;
 }
+#define TEST_DIR_NAME "./tests"
+void testExample_6_2()
+{
+    bool R = true;
 
+    FILE * file = fopen(TEST_DIR_NAME"/example_6_2.txt", "r");
+    assert(file != NULL);
+
+    Beam beam = {0};
+    PointForces point_forces = {0};
+    DistributedForces distrib_forces = {0};
+    
+    ejtest_expect_bool(&R, read_info_cli(file, &beam, &point_forces, &distrib_forces), true);
+    
+    Section expected_shear = { 0, 3.0, 3, { 3, 0, -(1.0/3.0) } };
+
+    DynamicArrayAppend(&point_forces, (PointForce){ 0 });
+
+    solveBeam(&beam, 
+            point_forces.items, point_forces.count, 
+            distrib_forces.items, distrib_forces.count);
+
+    //printf("Got:\n");
+    //printStructArray(beam.shears, beam.sectionsCount, sizeof(Section), printSection);
+    //printf("Expected:\n");
+    //printSection(&expected_shear);
+    ejtest_expect_struct(&R, beam.shears[0], expected_shear, comp_sections);
+
+    ejtest_print_result("testExample_6_2", R);
+};
 void testReadBeamInput()
 {
     bool R = true;
@@ -163,7 +199,6 @@ void testReadDistribforceInput()
 
     ejtest_print_result("testReadDistribforceInput", R);
 }
-
 void testReadInput()
 {
     bool R = true;
@@ -219,7 +254,42 @@ void testReadInput()
         ejtest_print_result("testReadInput", R);
         return;
     }
+
+    for (int i = 0; i < expected_point_forces.count; i++)
+    {
+        ejtest_expect_struct(&R, point_forces.items[i], expected_point_forces.items[i], comp_pointforces);
+        ejtest_expect_struct(&R, distrib_forces.items[i], expected_distrib_forces.items[i], comp_distribforces);
+    }
+
+    ///////////////////////////////////////////////
+
+    input_stream = fopen (TEST_DIR_NAME"/example_6_2.txt", "r");
+    assert(input_stream != NULL);
+
+    beam = (Beam){0}; 
+    expected_beam = (Beam){0};
+    point_forces.count = 0;
+    expected_point_forces.count = 0;
+    distrib_forces.count = 0;
+    expected_distrib_forces.count = 0;
+
+	expected_beam.length = 3.0;
+	expected_beam.sectionsCount = 4;
+
+	DynamicArrayAppend(&expected_distrib_forces, ((DistributedForce){ 0, 3.0, {0, 0.66667}}));
+
+    read_info_cli(input_stream, &beam, &point_forces, &distrib_forces);
+    fclose(input_stream);
     
+    ejtest_expect_float(&R, beam.length, expected_beam.length);
+    ejtest_expect_int(&R, beam.sectionsCount, expected_beam.sectionsCount);
+
+    if (!ejtest_expect_int(&R, point_forces.count, expected_point_forces.count)
+            || !ejtest_expect_int(&R, distrib_forces.count, expected_distrib_forces.count))
+    {
+        ejtest_print_result("testReadInput", R);
+        return;
+    }
 
     for (int i = 0; i < expected_point_forces.count; i++)
     {
@@ -242,7 +312,54 @@ void testDynamicArrayAppend()
     free(ints.items);
     ejtest_print_result("testDynamicArrayAppend", R);
 }
+void testCompBeams()
+{
+    bool R = true;
+    Beam a, b;
+    a = (Beam){0};
+    b = (Beam){0};
+    ejtest_expect_bool(&R, comp_beams(&a, &b), true);
 
+    a = (Beam){ .length = 1.0, 0 };
+    b = (Beam){ .length = 0.0, 0 };
+    ejtest_expect_bool(&R, comp_beams(&a, &b), false);
+
+    a = (Beam){ .length = 1.0, 0 };
+    b = (Beam){ .length = 1.0, 0 };
+    ejtest_expect_bool(&R, comp_beams(&a, &b), true);
+
+    a = (Beam){ .length = 1.0, .sectionsCount = 10 };
+    b = (Beam){ .length = 1.0, .sectionsCount = 10 };
+    ejtest_expect_bool(&R, comp_beams(&a, &b), true);
+
+    a = (Beam){ .length = 1.0, .sectionsCount = 10 };
+    b = (Beam){ .length = 1.0, .sectionsCount = 0  };
+    ejtest_expect_bool(&R, comp_beams(&a, &b), false);
+
+    ejtest_print_result("testCompBeams", R);
+};
+void testSolveBeamEmpty()
+{
+    // Given an empty beam and no forces, we should just be able to have a beam
+    // with nothing acting on it
+    bool R = true;
+	Beam beam = {0};
+	Beam expected_beam = {0};
+
+	PointForces point_forces = {0};
+	DistributedForces distributed_forces = {0};
+
+    bool solved = solveBeam(   
+            &beam, 
+            point_forces.items, point_forces.count,
+            distributed_forces.items, distributed_forces.count
+            );
+
+    ejtest_expect_bool(&R, solved, true);
+    ejtest_expect_int(&R, 0, beam.sectionsCount);
+    ejtest_expect_struct(&R, beam, expected_beam, comp_beams);
+    ejtest_print_result("testSolveBeamEmpty", R);
+}
 void testSolveBeam()
 {
     bool R = true;
@@ -250,7 +367,7 @@ void testSolveBeam()
 	beam.length = 1.0;
 	beam.sectionsCount = MAX_SECTIONS;
 
-	PointForce pointForces[10]; //TODO: figure out how many we should allocate for
+	PointForce pointForces[10]; //TODO: change to dynamic array
 	int pfCount;
 	pointForces[0] = (PointForce){ 0.0, 1 };
 	pointForces[1] = (PointForce){ 0.25,2 };
@@ -303,7 +420,6 @@ void testSolveBeam()
 
     ejtest_print_result("testSolveBeam", R);
 }
-
 void testWallReaction()
 {
     bool passed = true;
@@ -378,12 +494,12 @@ void testSeperateSections()
 	seperateBeamIntoSections(beamLength, pForces, pfCount, dForces, dfCount, sections, &sectionsCount);
 
 	Section expectedSections[] = {
-		(Section){ .start = 0.000000, .end = 0.250000, .pointForce =  1.000000 },
-		(Section){ .start = 0.250000, .end = 0.500000, .pointForce =  2.000000 },
-		(Section){ .start = 0.500000, .end = 0.650000, .pointForce =  3.000000 },
-		(Section){ .start = 0.650000, .end = 0.750000, .pointForce =  0.000000 },
-		(Section){ .start = 0.750000, .end = 0.950000, .pointForce =  0.000000 },
-		(Section){ .start = 0.950000, .end = 1.000000, .pointForce =  0.000000 },
+		(Section){ 0.000000, 0.250000, 1.000000 , {1.00, 0.00, 0.00, 0.00}},
+		(Section){ 0.250000, 0.500000, 2.000000 , {3.00, 0.00, 0.00, 0.00}},
+		(Section){ 0.500000, 0.650000, 3.000000 , {2.00, 0.00, 0.00, 0.00}},
+		(Section){ 0.650000, 0.750000, 0.000000 , {6.00, 0.00, 0.00, 0.00}},
+		(Section){ 0.750000, 0.950000, 0.000000 , {7.00, 0.00, 0.00, 0.00}},
+		(Section){ 0.950000, 1.000000, 0.000000 , {3.00, 0.00, 0.00, 0.00}},
 	};
 
     ejtest_expect_int(&R, ArrayCount(expectedSections), sectionsCount);

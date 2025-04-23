@@ -307,20 +307,22 @@ int compDistributedEndsPtr(const void * a, const void * b)
 	
 	return 0;
 }
-// Seperate beam into sections
-// Converts an array of point forces and potentially overlapping distributed
-// forces into an array of sections that cover the entire beam
-//
-// beamLength: length of the beam, used to cut off sections that go too far or add an "empty" section
-// pForces: array of point forces to be used
-// pfCount: number of elements in pForces
-// dForces: array of distributed forces to be used
-// dfCount: number of elements in dForces
-// sections: a buffer array that will be filled with Section objects
-// sectionsCount: pointer to a variable the holds the max amount of sections
-// 	allowed to be stored, if the number of sections found exceeds this number,
-// 	it will return false. After all the sections have been found sectionsCount
-// 	is updated to be the amount of sections in the sections array
+/*
+* Seperate beam into sections
+* Converts an array of point forces and potentially overlapping distributed
+* forces into an array of sections that cover the entire beam
+*
+* beamLength: length of the beam, used to cut off sections that go too far or add an "empty" section
+* pForces: array of point forces to be used
+* pfCount: number of elements in pForces
+* dForces: array of distributed forces to be used
+* dfCount: number of elements in dForces
+* sections: a buffer array that will be filled with Section objects
+* sectionsCount: pointer to a variable the holds the max amount of sections
+* 	allowed to be stored, if the number of sections found exceeds this number,
+* 	it will return false. After all the sections have been found sectionsCount
+* 	is updated to be the amount of sections in the sections array
+*/
 bool seperateBeamIntoSections(float beamLength,
 		PointForce pForces[],       int pfCount, 
 		DistributedForce dForces[], int dfCount, 
@@ -424,7 +426,7 @@ bool seperateBeamIntoSections(float beamLength,
 
     // This is to make sure we do not exceed the amount memory allocated, but
     // since we plan on using dynamic arrays it should become obsolete
-	if (*sectionsCount > 0 && iSection >= *sectionsCount) return false;
+	if (iSection >= *sectionsCount) return false;
 
 	// make sure sections cover only/entirely the beam
 	if (sections[iSection].start < beamLength) sections[iSection].end = beamLength;
@@ -558,6 +560,19 @@ void solveMomentSections(Section moment[], Section shear[], Section raw[], int c
 		}
 	}
 }
+/* 
+ * Solve for the shear and moment sections of the beam
+ *
+ * Parameters:
+ *  [out]beam: pointer to beam whose sections will get modified
+ *  [in]pointForces[]: array of point forces acting on beam
+ *  [in]pfCount: number of pointforces
+ *  [in]distributedForces[]: array of distributed forces acting on beam
+ *  [in]pfCount: number of distributed forces
+ *
+ * Return:
+ *  bool: false on fail (right now its only when we cannot seperate sections)
+*/
 bool solveBeam(Beam * beam,
 		PointForce pointForces[], int pfCount,
 		DistributedForce distributedForces[], int dfCount)

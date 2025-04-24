@@ -56,13 +56,14 @@ typedef struct Section Section;
 
 struct Beam {
 	float length;
+    float wall_reaction_force;
+    float wall_reaction_moment;
 	int sectionsCount;
 	Section raws[MAX_SECTIONS];
 	Section shears[MAX_SECTIONS];
 	Section moments[MAX_SECTIONS];
 };
 typedef struct Beam Beam;
-
 
 float evalPolynomial(float x, float poly[MAX_POLYNOMIAL_DEGREE]);
 void integratePolynomial(float dest[MAX_POLYNOMIAL_DEGREE], const float src[MAX_POLYNOMIAL_DEGREE]);
@@ -453,6 +454,17 @@ void printPolynomial(float p[MAX_POLYNOMIAL_DEGREE])
 
 }
 
+/*
+ * Calculate the reaction moment of the wall, will return a negative value when
+ * the wall is on the left and forces are pushing down on the beam
+ *
+ * Parameters:
+ *  [in] Section sections: raw sections to calculate moment about
+ *  [in] int sectionsCount: number of sections
+ *
+ * Return:
+ *  float: reaction moment of wall
+ */
 float calculateWallReactionMoment(Section sections[], int sectionsCount)
 {
 	float pointSum = 0;
@@ -467,7 +479,7 @@ float calculateWallReactionMoment(Section sections[], int sectionsCount)
 		float integral = evalPolynomial(sections[i].end, integrated) - evalPolynomial(sections[i].start, integrated);
 		distributedSum += integral * (sections[i].start + sections[i].end)/2;
 	}
-	return pointSum + distributedSum;
+	return -(pointSum + distributedSum);
 }
 
 float calculateWallReactionForce(Section sections[], int sectionsCount)
@@ -550,7 +562,7 @@ void solveMomentSections(Section moment[], Section shear[], Section raw[], int c
  
  		integratePolynomial(moment[i].polynomial, shear[i].polynomial);
 
-		if (i == 0) moment[i].polynomial[0] = wallReactionMoment;
+		if (i == 0) moment[i].polynomial[0] = -wallReactionMoment;
 		else 
 		{
 			float previous = evalPolynomial(moment[i-1].end, moment[i-1].polynomial);
@@ -582,12 +594,19 @@ bool solveBeam(Beam * beam,
 	Section * momentSections = beam->moments;
 	float beamLength = beam->length;
 
-	if (!seperateBeamIntoSections(beamLength, pointForces, pfCount, distributedForces, dfCount, rawSections, &beam->sectionsCount))
+    if (!seperateBeamIntoSections(
+                beamLength, 
+                pointForces, pfCount,
+                distributedForces, dfCount, 
+                rawSections, &beam->sectionsCount)
+        )
 	{
-		printf("ERROR: forces result in too many sections\n");
+		// ERROR: forces result in too many sections (number of sections > allocated sections)
 		return false;
 	}
 	int sectionsCount = beam->sectionsCount;
+    beam->wall_reaction_force = calculateWallReactionForce(rawSections, sectionsCount);
+    beam->wall_reaction_moment = calculateWallReactionMoment(rawSections, sectionsCount);
 	solveShearSections(shearSections, rawSections, sectionsCount);
 	solveMomentSections(momentSections, shearSections, rawSections, sectionsCount);
 	return true;

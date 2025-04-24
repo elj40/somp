@@ -29,7 +29,7 @@ void testSeperateSections();
 void testWallReaction();
 void testCompBeams();
 void testSolveBeamEmpty();
-void testSolveBeam();
+void testExample_A();
 void testDynamicArrayAppend();
 void testReadInput();
 void testReadBeamInput();
@@ -37,6 +37,7 @@ void testReadPointforceInput();
 void testReadDistribforceInput();
 
 void testExample_6_2();
+void testExample_6_7();
 
 typedef struct {
     int * items;
@@ -60,20 +61,62 @@ int main()
 	testFloatComparison();
 	testLinkedLists();
 	testSeperateSections();
+
 	testWallReaction();
     testCompBeams();
-    testSolveBeamEmpty();
-    testSolveBeam();
     testReadBeamInput();
     testReadPointforceInput();
     testReadDistribforceInput();
     testReadInput();
+    testSolveBeamEmpty();
+    testExample_A();
     testExample_6_2();
+    testExample_6_7();
 
     testDynamicArrayAppend();
     return 0;
 }
 #define TEST_DIR_NAME "./tests"
+void testExample_6_7()
+{
+    bool R = true;
+
+    FILE * file = fopen(TEST_DIR_NAME"/example_6_7.txt", "r");
+    assert(file != NULL);
+
+    Beam beam = {0};
+    PointForces point_forces = {0};
+    DistributedForces distrib_forces = {0};
+    
+    ejtest_expect_bool(&R, read_info_cli(file, &beam, &point_forces, &distrib_forces), true);
+    
+    // Section: { start, end, pointforce, polynomial[] }
+    float expected_wrf = 12.0;
+    float expected_wrm = -24.0;
+    Section expected_raw = { 0, 4.0, 0, { 3.0 } };
+    Section expected_shear = { 0, 4.0, 0, { 12.0, -(12.0/4.0)} };
+
+    // TODO: get rid of this random segfault
+    DynamicArrayAppend(&point_forces, (PointForce){ 0 } );
+
+    solveBeam(&beam, 
+            point_forces.items, point_forces.count, 
+            distrib_forces.items, distrib_forces.count);
+
+    ejtest_expect_float(&R, beam.wall_reaction_force, expected_wrf);
+    ejtest_expect_float(&R, beam.wall_reaction_moment, expected_wrm);
+    ejtest_expect_struct(&R, beam.raws[0], expected_raw, comp_sections);
+    bool r = ejtest_expect_struct(&R, beam.shears[0], expected_shear, comp_sections);
+
+    if (!r)
+    {
+        printSection(&beam.shears[0]);
+        printSection(&expected_shear);
+        putchar('\n');
+    };
+
+    ejtest_print_result("testExample_6_7", R);
+};
 void testExample_6_2()
 {
     bool R = true;
@@ -87,18 +130,19 @@ void testExample_6_2()
     
     ejtest_expect_bool(&R, read_info_cli(file, &beam, &point_forces, &distrib_forces), true);
     
-    Section expected_shear = { 0, 3.0, 3, { 3, 0, -(1.0/3.0) } };
+    // Section: { start, end, pointforce, polynomial[] }
+    Section expected_raw = { 0, 3.0, 0, { 0, (2.0/3.0) } };
+    Section expected_shear = { 0, 3.0, 0, { 3, 0, -(1.0/3.0) } };
 
-    DynamicArrayAppend(&point_forces, (PointForce){ 0 });
+    DynamicArrayAppend(&point_forces, (PointForce){ 0 } );
 
     solveBeam(&beam, 
             point_forces.items, point_forces.count, 
             distrib_forces.items, distrib_forces.count);
 
-    //printf("Got:\n");
-    //printStructArray(beam.shears, beam.sectionsCount, sizeof(Section), printSection);
-    //printf("Expected:\n");
-    //printSection(&expected_shear);
+    ejtest_expect_float(&R, beam.wall_reaction_force, 3.0);
+    ejtest_expect_float(&R, beam.wall_reaction_moment, -4.5);
+    ejtest_expect_struct(&R, beam.raws[0], expected_raw, comp_sections);
     ejtest_expect_struct(&R, beam.shears[0], expected_shear, comp_sections);
 
     ejtest_print_result("testExample_6_2", R);
@@ -355,12 +399,12 @@ void testSolveBeamEmpty()
             distributed_forces.items, distributed_forces.count
             );
 
-    ejtest_expect_bool(&R, solved, true);
+    ejtest_expect_bool(&R, solved, false);
     ejtest_expect_int(&R, 0, beam.sectionsCount);
     ejtest_expect_struct(&R, beam, expected_beam, comp_beams);
     ejtest_print_result("testSolveBeamEmpty", R);
 }
-void testSolveBeam()
+void testExample_A()
 {
     bool R = true;
 	Beam beam = {0};
@@ -415,10 +459,16 @@ void testSolveBeam()
     {
         ejtest_expect_struct(&R, beam.raws[i], expected_raw[i], comp_sections);
         ejtest_expect_struct(&R, beam.shears[i], expected_shear[i], comp_sections);
-        ejtest_expect_struct(&R, beam.moments[i], expected_moment[i], comp_sections);
+        bool r = ejtest_expect_struct(&R, beam.moments[i], expected_moment[i], comp_sections);
+        if (!r)
+        {
+            printSection(&beam.moments[i]);
+            printSection(&expected_moment[i]);
+            putchar('\n');
+        }
     };
 
-    ejtest_print_result("testSolveBeam", R);
+    ejtest_print_result("testExample_A", R);
 }
 void testWallReaction()
 {

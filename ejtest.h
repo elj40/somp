@@ -24,11 +24,15 @@ bool ejtest_nearly_equal(float a, float b)
 }
 bool ejtest_expect_bool_file_line(bool * p, bool a, bool b, const char * file, int line)
 {
+    // TODO: add capability of printing variables,
+    // e.g. expected a == b;
+    const char * t = "true";
+    const char * f = "false";
     if (a == b) {
         *p = *p && true;
         return *p;
     }
-    printf("%s,%d:: Expected equal: |%d|; |%d|\n", file, line, a, b);
+    printf("%s,%d:: Expected equal: |%s|; |%s|\n", file, line, a ? t : f, b ? t : f);
     *p = false;
     return *p;
 }

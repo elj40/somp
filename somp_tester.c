@@ -363,7 +363,6 @@ void testExample_Empty()
     // Given an empty beam and no forces, we should just be able to have a beam
     // with nothing acting on it
     bool R = true;
-    bool r = true;
 	Beam beam = {0};
 
     beam.sections_count = MAX_SECTIONS;
@@ -378,7 +377,7 @@ void testExample_Empty()
             );
 
     ejtest_expect_bool(&R, solved, true);
-    ejtest_expect_int(&R, beam.sections_count, 0);
+    ejtest_expect_int(&R, beam.sections_count, 1);
     ejtest_expect_float(&R, beam.wall_reaction_force, 0);
     ejtest_expect_float(&R, beam.wall_reaction_moment, 0);
     ejtest_expect_float(&R, beam.length, 0);
@@ -416,42 +415,94 @@ void testExample_A()
         { .start = 0.650, .end = 0.750, .pointForce = 0.000, .polynomial = {6.00, 0.00, 0.00, 0.00}},
         { .start = 0.750, .end = 0.950, .pointForce = 0.000, .polynomial = {7.00, 0.00, 0.00, 0.00}},
         { .start = 0.950, .end = 1.000, .pointForce = 0.000, .polynomial = {3.00, 0.00, 0.00, 0.00}},
+        { .start = 1.000, .end = 0.000, .pointForce = 4.000, .polynomial = {0.00, 0.00, 0.00, 0.00}},
     };
     Section expected_shear[] = {
-        { .start = 0.000, .end = 0.250, .pointForce = 0.000, .polynomial = {8.45, -1.00, -0.00, -0.00}},
-        { .start = 0.250, .end = 0.500, .pointForce = 0.000, .polynomial = {6.95, -3.00, -0.00, -0.00}},
-        { .start = 0.500, .end = 0.650, .pointForce = 0.000, .polynomial = {3.45, -2.00, -0.00, -0.00}},
-        { .start = 0.650, .end = 0.750, .pointForce = 0.000, .polynomial = {6.05, -6.00, -0.00, -0.00}},
-        { .start = 0.750, .end = 0.950, .pointForce = 0.000, .polynomial = {6.80, -7.00, -0.00, -0.00}},
-        { .start = 0.950, .end = 1.000, .pointForce = 0.000, .polynomial = {3.00, -3.00, -0.00, -0.00}},
+        { .start = 0.000, .end = 0.250, .pointForce = 0.000, .polynomial = {12.45, -1.00, -0.00, -0.00}},
+        { .start = 0.250, .end = 0.500, .pointForce = 0.000, .polynomial = {10.95, -3.00, -0.00, -0.00}},
+        { .start = 0.500, .end = 0.650, .pointForce = 0.000, .polynomial = {7.45, -2.00, -0.00, -0.00}},
+        { .start = 0.650, .end = 0.750, .pointForce = 0.000, .polynomial = {10.05, -6.00, -0.00, -0.00}},
+        { .start = 0.750, .end = 0.950, .pointForce = 0.000, .polynomial = {10.80, -7.00, -0.00, -0.00}},
+        { .start = 0.950, .end = 1.000, .pointForce = 0.000, .polynomial = {7.00, -3.00, -0.00, -0.00}},
+        { .start = 1.000, .end = 0.000, .pointForce = 0.000, .polynomial = {0.00,  0.00, -0.00, -0.00}},
     };
     Section expected_moment[] = {
-        { .start = 0.000, .end = 0.250, .pointForce = 0.000, .polynomial = {-4.24, 8.45, -0.50, -0.00}},
-        { .start = 0.250, .end = 0.500, .pointForce = 0.000, .polynomial = {-3.80, 6.95, -1.50, -0.00}},
-        { .start = 0.500, .end = 0.650, .pointForce = 0.000, .polynomial = {-2.18, 3.45, -1.00, -0.00}},
-        { .start = 0.650, .end = 0.750, .pointForce = 0.000, .polynomial = {-3.02, 6.05, -3.00, -0.00}},
-        { .start = 0.750, .end = 0.950, .pointForce = 0.000, .polynomial = {-3.30, 6.80, -3.50, -0.00}},
-        { .start = 0.950, .end = 1.000, .pointForce = 0.000, .polynomial = {-1.50, 3.00, -1.50, -0.00}},
+        { .start = 0.000, .end = 0.250, .pointForce = 0.000, .polynomial = {-8.24125, 12.45, -0.50, -0.00}},
+        { .start = 0.250, .end = 0.500, .pointForce = 0.000, .polynomial = {-7.80375, 10.95, -1.50, -0.00}},
+        { .start = 0.500, .end = 0.650, .pointForce = 0.000, .polynomial = {-6.17875, 7.45, -1.00, -0.00}},
+        { .start = 0.650, .end = 0.750, .pointForce = 0.000, .polynomial = {-7.02375, 10.05, -3.00, -0.00}},
+        { .start = 0.750, .end = 0.950, .pointForce = 0.000, .polynomial = {-7.30500, 10.80, -3.50, -0.00}},
+        { .start = 0.950, .end = 1.000, .pointForce = 0.000, .polynomial = {-5.50, 7.00, -1.50, -0.00}},
+        { .start = 1.000, .end = 0.000, .pointForce = 0.000, .polynomial = {0.00,  0.00, -0.00, -0.00}},
     };
 
     ejtest_expect_int(&R, ArrayCount(expected_raw), beam.sections_count);
 
     for (int i = 0; i < beam.sections_count; i++)
     {
-        ejtest_expect_struct(&R, beam.raws[i], expected_raw[i], comp_sections);
-        ejtest_expect_struct(&R, beam.shears[i], expected_shear[i], comp_sections);
-        bool r = ejtest_expect_struct(&R, beam.moments[i], expected_moment[i], comp_sections);
-        if (!r)
+        bool r1, r2, r3;
+        r1 = r2 = r3 = true;
+        r1 = ejtest_expect_struct(&R, beam.raws[i], expected_raw[i], comp_sections);
+        r2 = ejtest_expect_struct(&R, beam.shears[i], expected_shear[i], comp_sections);
+        r3 = ejtest_expect_struct(&R, beam.moments[i], expected_moment[i], comp_sections);
+        if (!r1 || !r2 || !r3) {
+            printf("i: %d\n", i);
+        if (!r1)
         {
+            printf("Raws:\n");
+            printf("%f %f\n", round_to_digits(beam.raws[0].polynomial[0], 6), round_to_digits(expected_raw[0].polynomial[0], 6));
+            printSection(&beam.raws[i]);
+            printSection(&expected_raw[i]);
+            putchar('\n');
+        }
+        if (!r2)
+        {
+            printf("Shears:\n");
+            printf("%f %f\n", round_to_digits(beam.shears[0].polynomial[0], 6), round_to_digits(expected_shear[0].polynomial[0], 6));
+            printSection(&beam.shears[i]);
+            printSection(&expected_shear[i]);
+            putchar('\n');
+        }
+        if (!r3)
+        {
+            printf("Moments:\n");
+            printf("%f %f\n", round_to_digits(beam.moments[0].polynomial[0], 6), round_to_digits(expected_moment[0].polynomial[0], 6));
             printSection(&beam.moments[i]);
             printSection(&expected_moment[i]);
             putchar('\n');
+        }
         }
     };
 
     ejtest_print_result("testExample_A", R);
 }
-void testWallReaction()
+void testExample_B()
+{
+    bool R = true;
+	Beam beam = {0};
+
+    beam.length = 1.0;
+    beam.sections_count = MAX_SECTIONS;
+
+	PointForces point_forces = {0};
+	DistributedForces distributed_forces = {0};
+
+    DynamicArrayAppend(&point_forces, ((PointForce){ .distance = 1, .force = 1 }));
+
+    bool solved = solveBeam(   
+            &beam, 
+            point_forces.items, point_forces.count,
+            distributed_forces.items, distributed_forces.count
+            );
+    ejtest_expect_bool(&R, solved, true);
+
+    ejtest_expect_int(&R, beam.sections_count, 2);
+    ejtest_expect_float(&R, beam.wall_reaction_force, 1);
+    ejtest_expect_float(&R, beam.wall_reaction_moment, -1);
+
+    ejtest_print_result("testExample_B", R);
+};
+void testWallReactionForce()
 {
     bool passed = true;
 	float wrf;
@@ -549,6 +600,7 @@ void testSeperateSections()
 		(Section){ 0.650000, 0.750000, 0.000000 , {6.00, 0.00, 0.00, 0.00}},
 		(Section){ 0.750000, 0.950000, 0.000000 , {7.00, 0.00, 0.00, 0.00}},
 		(Section){ 0.950000, 1.000000, 0.000000 , {3.00, 0.00, 0.00, 0.00}},
+		(Section){ 1.000000, 0.000000, 4.000000 , {0.00, 0.00, 0.00, 0.00}},
 	};
 
     ejtest_expect_int(&R, ArrayCount(expectedSections), sectionsCount);

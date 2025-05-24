@@ -121,8 +121,8 @@ bool comp_beams(void * a, void * b)
 {
     Beam * A = (Beam *) a;
     Beam * B = (Beam *) b;
-	if (!nearly_equal(A->length, B->length)) { printf("l\n"); return false;}
-	if (A->sections_count != B->sections_count) { printf("s\n"); return false;}
+	if (!nearly_equal(A->length, B->length)) { return false;}
+	if (A->sections_count != B->sections_count) { return false;}
 
     for (int j = 0; j < A->sections_count; j++)
     {
@@ -138,15 +138,15 @@ bool comp_sections(void * a, void * b)
 {
     Section * A = (Section *) a;
     Section * B = (Section *) b;
-	if (!nearly_equal(A->start, B->start)) return false;
-	if (!nearly_equal(A->end, B->end)) return false;
-	if (!nearly_equal(A->pointForce, B->pointForce)) return false;
+	if (!nearly_equal(A->start, B->start)) { printf("1\n"); return false; };
+	if (!nearly_equal(A->end, B->end)) { printf("2\n"); return false; };
+	if (!nearly_equal(A->pointForce, B->pointForce)) { printf("3\n"); return false; };
 
     for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
     {
-        float term_A = round_to_digits(A->polynomial[i], 3);
-        float term_B = round_to_digits(B->polynomial[i], 3);
-        if (!nearly_equal(term_A, term_B)) return false;
+        float term_A = round_to_digits(A->polynomial[i], 6);
+        float term_B = round_to_digits(B->polynomial[i], 6);
+        if (!nearly_equal(term_A, term_B)) { printf("4\n"); return false; };
     }
 
 	return true;
@@ -186,11 +186,16 @@ bool comp_distribforces(void * a, void * b)
 
 void printSection(const void * vp)
 {
+    const int decimals = 3;
+    const int poly_decimals = 8;
 	Section * s = (Section *)vp;
-	printf("Section:: start: %.3f, end: %.3f, pointForce: %.3f, poly: [", s->start, s->end, s->pointForce);
+    printf("Section:: start: %.*f, end: %.*f, pointForce: %.*f, poly: [",
+            decimals, s->start, 
+            decimals, s->end, 
+            decimals, s->pointForce);
 	for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
 	{
-		printf("%.2f", s->polynomial[i]);
+		printf("%.*f", poly_decimals, s->polynomial[i]);
 		if (i < MAX_POLYNOMIAL_DEGREE-1) printf(", ");
 	}
 	printf("]\n");
@@ -433,7 +438,9 @@ bool seperateBeamIntoSections(float beamLength,
 	if (sections[iSection].start < beamLength) sections[iSection].end = beamLength;
 	else sections[iSection-1].end = beamLength;
 
-	*sectionsCount = iSection;
+    // Since iSection represents the index of the last section, the no. of
+    // sections is iSection + 1
+	*sectionsCount = iSection+1;
 
 	free(dFS);
 	free(dFE);

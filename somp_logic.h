@@ -58,7 +58,7 @@ struct Beam {
 	float length;
     float wall_reaction_force;
     float wall_reaction_moment;
-	int sectionsCount;
+	int sections_count;
 	Section raws[MAX_SECTIONS];
 	Section shears[MAX_SECTIONS];
 	Section moments[MAX_SECTIONS];
@@ -121,10 +121,10 @@ bool comp_beams(void * a, void * b)
 {
     Beam * A = (Beam *) a;
     Beam * B = (Beam *) b;
-	if (!nearly_equal(A->length, B->length)) return false;
-	if (A->sectionsCount != B->sectionsCount) return false;
+	if (!nearly_equal(A->length, B->length)) { printf("l\n"); return false;}
+	if (A->sections_count != B->sections_count) { printf("s\n"); return false;}
 
-    for (int j = 0; j < A->sectionsCount; j++)
+    for (int j = 0; j < A->sections_count; j++)
     {
         if (!comp_sections(&A->raws[j], &B->raws[j])) return false;
         if (!comp_sections(&A->shears[j], &B->shears[j])) return false;
@@ -598,13 +598,13 @@ bool solveBeam(Beam * beam,
                 beamLength, 
                 pointForces, pfCount,
                 distributedForces, dfCount, 
-                rawSections, &beam->sectionsCount)
+                rawSections, &beam->sections_count)
         )
 	{
 		// ERROR: forces result in too many sections (number of sections > allocated sections)
 		return false;
 	}
-	int sectionsCount = beam->sectionsCount;
+	int sectionsCount = beam->sections_count;
     beam->wall_reaction_force = calculateWallReactionForce(rawSections, sectionsCount);
     beam->wall_reaction_moment = calculateWallReactionMoment(rawSections, sectionsCount);
 	solveShearSections(shearSections, rawSections, sectionsCount);

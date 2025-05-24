@@ -56,7 +56,7 @@ bool read_beam_info_cli(char * line, Beam * beam)
 {
     //#B
     //1.0 10
-    if (sscanf(line, "%f %d\n", &beam->length, &beam->sectionsCount) != 2) return false;
+    if (sscanf(line, "%f %d\n", &beam->length, &beam->sections_count) != 2) return false;
     return true;
 }
 bool read_pointforce_info_cli(char * line, PointForce * p) 

@@ -377,17 +377,20 @@ void testExample_Empty()
             distributed_forces.items, distributed_forces.count
             );
 
-    ejtest_expect_bool(&R, solved, false);
-    ejtest_expect_int(&R, 0, beam.sectionsCount);
-    ejtest_expect_struct(&R, beam, expected_beam, comp_beams);
-    ejtest_print_result("testSolveBeamEmpty", R);
+    ejtest_expect_bool(&R, solved, true);
+    ejtest_expect_int(&R, beam.sections_count, 0);
+    ejtest_expect_float(&R, beam.wall_reaction_force, 0);
+    ejtest_expect_float(&R, beam.wall_reaction_moment, 0);
+    ejtest_expect_float(&R, beam.length, 0);
+
+    ejtest_print_result("testExample_Empty", R);
 }
 void testExample_A()
 {
     bool R = true;
 	Beam beam = {0};
 	beam.length = 1.0;
-	beam.sectionsCount = MAX_SECTIONS;
+	beam.sections_count = MAX_SECTIONS;
 
 	PointForce pointForces[10]; //TODO: change to dynamic array
 	int pfCount;
@@ -493,6 +496,24 @@ void testWallReaction()
 	wrf = calculateWallReactionForce(sections, 3);
     ejtest_expect_float(&passed, wrf, (1.0/3.0) + 2.0 + 3.0);
 	ejtest_print_result("testWallReaction", passed);
+}
+void testWallReactionMoment()
+{
+    bool R = true;
+    float wrm;
+    Section sections[2] = {0};
+
+    sections[0] = (Section){0};
+    sections[1] = (Section){ .start = 1, .pointForce = 1 };
+    wrm = calculateWallReactionMoment(sections, 2);
+    ejtest_expect_float(&R, wrm, -1.0);
+
+    sections[0] = (Section){0};
+    sections[1] = (Section){ .start = 0, .end = 1, .polynomial = {1,0} };
+    wrm = calculateWallReactionMoment(sections, 2);
+    ejtest_expect_float(&R, wrm, -0.5);
+
+    ejtest_print_result("testWallReactionMoment", R);
 }
 void testSeperateSections()
 {

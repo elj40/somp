@@ -40,6 +40,7 @@ void testReadDistribforceInput();
 void testExample_Empty();
 void testExample_A();
 void testExample_B();
+void testExample_C();
 void testExample_6_2();
 void testExample_6_7();
 
@@ -61,6 +62,7 @@ int main()
     testExample_Empty();
     testExample_A();
     testExample_B();
+    testExample_C();
     testExample_6_2();
     testExample_6_7();
 
@@ -501,6 +503,35 @@ void testExample_B()
     ejtest_expect_float(&R, beam.wall_reaction_moment, -1);
 
     ejtest_print_result("testExample_B", R);
+};
+void testExample_C()
+{
+    bool R = true;
+    const char * ejtest_test_name = "testExample_C";
+    {
+
+	Beam beam = {0};
+    beam.length = 1.0;
+    beam.sections_count = MAX_SECTIONS;
+
+	PointForces point_forces = {0};
+	DistributedForces distributed_forces = {0};
+
+    DynamicArrayAppend(&distributed_forces, ((DistributedForce){ .start = 0.5, .end = 1, .polynomial = {2,0}}));
+
+    bool solved = solveBeam(   
+            &beam, 
+            point_forces.items, point_forces.count,
+            distributed_forces.items, distributed_forces.count
+            );
+    ejtest_expect_bool(&R, solved, true);
+
+    ejtest_expect_int(&R, beam.sections_count, 3);
+    ejtest_expect_float(&R, beam.wall_reaction_force, 1);
+    ejtest_expect_float(&R, beam.wall_reaction_moment, -1*0.75);
+    }
+
+    ejtest_print_result(ejtest_test_name, R);
 };
 void testWallReactionForce()
 {

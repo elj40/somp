@@ -18,6 +18,9 @@ bool read_distributedforce_info_cli(char * line, DistributedForce * d);
 
 bool read_info_cli(FILE * file, Beam * beam, PointForces * pfs, DistributedForces * dfs)
 {
+    //TODO: this should become a state machine so point force or distrib force
+    //sections arent required
+    //TODO: exit on ^D
     char * line = NULL;
     size_t line_buffer_size = 0;
 

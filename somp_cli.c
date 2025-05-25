@@ -71,9 +71,9 @@ int main(int argc, char * argv[])
     //output
     printf("\nOutput:\n");
 
-    printStructArray(beam.raws, beam.sectionsCount, sizeof(beam.raws[0]), printSection );
-    printStructArray(beam.shears, beam.sectionsCount, sizeof(beam.shears[0]), printSection );
-    printStructArray(beam.moments, beam.sectionsCount, sizeof(beam.moments[0]), printSection );
+    printStructArray(beam.raws, beam.sections_count, sizeof(beam.raws[0]), printSection );
+    printStructArray(beam.shears, beam.sections_count, sizeof(beam.shears[0]), printSection );
+    printStructArray(beam.moments, beam.sections_count, sizeof(beam.moments[0]), printSection );
 
 	return 0;
 }

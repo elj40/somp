@@ -5,9 +5,9 @@
 #include <sys/stat.h>
 #include <stdbool.h>
 
-bool build_somp()
+bool build_somp_cli()
 {
-    const char * compile[] = { "gcc", "-ggdb", "-o", "somp.out", "somp.c","-lm", NULL }; 
+    const char * compile[] = { "gcc", "-ggdb", "-o", "somp.out", "somp_cli.c","-lm", NULL }; 
     if (!run_command_sync(ELNOB_ARRAY_SIZE(compile), compile)) return false;
     const char * run[] = { "./somp.out", NULL };
     if (!run_command_sync(ELNOB_ARRAY_SIZE(run), run)) return false;
@@ -25,7 +25,7 @@ bool build_tests()
 }
 int main(int argc, const char * argv[])
 {
-
+    //TODO: make all the rebuild yourself into macr or function
     struct stat code_stat;
     struct stat libh_stat;
     struct stat exec_stat;
@@ -52,7 +52,7 @@ int main(int argc, const char * argv[])
         if (!build_tests()) return 1;
     } else 
     {
-        if (!build_somp()) return 1;
+        if (!build_somp_cli()) return 1;
     }
 
 

@@ -372,8 +372,14 @@ bool seperateBeamIntoSections(float beamLength,
         // BIG WHOOPS HERE!!!
         // We still get a segfault if there are zero point forces 
 		
-		int P_less_S = (iDS < dfCount) ? pF[iPF].distance < dFS[iDS]->start : 1;
-		int P_less_E = (iDE < dfCount) ? pF[iPF].distance < dFE[iDE]->end : 1;
+        int P_less_S = 0; 
+        int P_less_E = 0;
+
+        if (pfCount != 0)
+        {
+            P_less_S = (iDS < dfCount) ? pF[iPF].distance < dFS[iDS]->start : 1;
+            P_less_E = (iDE < dfCount) ? pF[iPF].distance < dFE[iDE]->end : 1;
+        }
 		
 		int S_less_E = iDS < dfCount && ((iDE < dfCount) ? dFS[iDS]->start < dFE[iDE]->end : 1);
 		if (iPF < pfCount && P_less_S && P_less_E)

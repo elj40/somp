@@ -8,4 +8,5 @@ even lower??) framework one day
 
 ## Dependencies
 * Submodules:
-    * ejtest: [](https://github.com/elj40/ejtest.git)
+    * ejtest: [https://github.com/elj40/ejtest.git](https://github.com/elj40/ejtest.git)
+    * SDL3: [https://github.com/libsdl-org/SDL](https://github.com/libsdl-org/SDL)

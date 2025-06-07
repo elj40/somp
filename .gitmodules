@@ -1,0 +1,6 @@
+[submodule "ejtest"]
+	path = ejtest
+	url = git@github.com:elj40/ejtest.git
+[submodule "elnob"]
+	path = elnob
+	url = git@github.com:elj40/elnob.git

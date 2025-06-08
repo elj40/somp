@@ -190,7 +190,7 @@ bool comp_distribforces(void * a, void * b)
 void printSection(const void * vp)
 {
     const int decimals = 3;
-    const int poly_decimals = 8;
+    const int poly_decimals = 4;
 	Section * s = (Section *)vp;
     printf("Section:: start: %.*f, end: %.*f, pointForce: %.*f, poly: [",
             decimals, s->start, 

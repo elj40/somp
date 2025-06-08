@@ -13,9 +13,14 @@
 
 #include <SDL3/SDL.h>
 
+#define ASPECT_RATIO (16.0/9.0)
+#define WINDOW_WIDTH 400
+#define WINDOW_HEIGHT (WINDOW_WIDTH/ASPECT_RATIO)
+#define WINDOW_TITLE "SOMP"
+
 typedef void* module_init_t(void * state);
-typedef void* module_reload_t(void * state);
-typedef void* module_main_t();
+typedef void* module_reload_t(void * state, SDL_Window * sdl_window, SDL_Renderer * sdl_renderer);
+typedef void* module_main_t(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer);
 typedef void* module_close_t();
 
 typedef struct {
@@ -29,8 +34,6 @@ typedef struct {
 static const char * dl_filename = "somp_gui.so";
 static void * dl_handle = NULL;
 
-#define WINDOW_WIDTH 200
-#define WINDOW_HEIGHT 200
 
 bool load_module(SompModule * somp)
 {
@@ -70,7 +73,12 @@ int main()
     SDL_Renderer * sdl_renderer = NULL;
 
     if (!SDL_Init(SDL_INIT_VIDEO)) goto cleanup;
-    if (!(sdl_window = SDL_CreateWindow("SDL", WINDOW_WIDTH, WINDOW_HEIGHT, SDL_WINDOW_RESIZABLE))) goto cleanup;
+    if (
+            !(sdl_window = SDL_CreateWindow(
+                    WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT, 
+                    SDL_WINDOW_RESIZABLE|SDL_WINDOW_ALWAYS_ON_TOP)
+             )
+       ) goto cleanup;
     if (!(sdl_renderer = SDL_CreateRenderer(sdl_window, NULL))) goto cleanup;
 
     SompModule somp = {0};
@@ -86,12 +94,12 @@ int main()
         {
             somp.state = somp.close();
             if (!load_module(&somp)) quit = true;
-            somp.reload(somp.state);
+            somp.reload(somp.state, sdl_window, sdl_renderer);
             reloaded_once = true;
         }
         else if (!key_state[SDL_SCANCODE_H]) reloaded_once = false;
 
-        if (!somp.main(sdl_renderer)) quit = true;
+        if (!somp.main(sdl_window, sdl_renderer)) quit = true;
     };
 
 cleanup:

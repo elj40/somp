@@ -608,6 +608,13 @@ bool solveBeam(Beam * beam,
 	Section * rawSections = beam->raws;
 	Section * shearSections = beam->shears;
 	Section * momentSections = beam->moments;
+    // Need to make sure the beam sections are cleared before we do calculations
+    for (int i = 0; i < beam->sections_count; i++)
+    {
+        rawSections[i] = (Section){0};
+        shearSections[i] = (Section){0};
+        momentSections[i] = (Section){0};
+    }
 	float beamLength = beam->length;
 
     if (!seperateBeamIntoSections(

@@ -592,7 +592,8 @@ void solveMomentSections(Section moment[], Section shear[], Section raw[], int c
  * Solve for the shear and moment sections of the beam
  *
  * Parameters:
- *  [out]beam: pointer to beam whose sections will get modified
+ *  [out]beam:  pointer to beam whose sections will get modified, sections and
+ *      sections_count get reset before updating them
  *  [in]pointForces[]: array of point forces acting on beam
  *  [in]pfCount: number of pointforces
  *  [in]distributedForces[]: array of distributed forces acting on beam
@@ -608,14 +609,16 @@ bool solveBeam(Beam * beam,
 	Section * rawSections = beam->raws;
 	Section * shearSections = beam->shears;
 	Section * momentSections = beam->moments;
+	float beamLength = beam->length;
+
     // Need to make sure the beam sections are cleared before we do calculations
+    beam->sections_count = MAX_SECTIONS;
     for (int i = 0; i < beam->sections_count; i++)
     {
         rawSections[i] = (Section){0};
         shearSections[i] = (Section){0};
         momentSections[i] = (Section){0};
     }
-	float beamLength = beam->length;
 
     if (!seperateBeamIntoSections(
                 beamLength, 

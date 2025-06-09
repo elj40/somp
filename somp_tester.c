@@ -44,7 +44,8 @@ void testExample_C();
 void testExample_6_2();
 void testExample_6_7();
 
-void testDoubleSolve();
+void testDoubleSameSolve();
+void testDoubleDiffSolve();
 
 int main()
 {
@@ -68,15 +69,54 @@ int main()
     testExample_6_2();
     testExample_6_7();
 
-    testDoubleSolve();
+    testDoubleSameSolve();
+    testDoubleDiffSolve();
     return 0;
 }
 #define TEST_BEGIN(name) void name() {\
     bool R = true;\
     const char * test_name = #name;
 #define TEST_END() ejtest_print_result(test_name, R); }
+TEST_BEGIN(testDoubleDiffSolve)
+{
+    Beam beam = {0};
+    beam.length = 1.0;
+    beam.sections_count = MAX_SECTIONS;
 
-TEST_BEGIN(testDoubleSolve)
+    PointForces point_forces = {0};
+    DistributedForces distributed_forces = {0};
+
+    DynamicArrayAppend(&distributed_forces, ((DistributedForce){ .start = 0.5, .end = 1, .polynomial = {2,0}}));
+
+    bool solved = solveBeam(
+            &beam,
+            point_forces.items, point_forces.count,
+            distributed_forces.items, distributed_forces.count
+            );
+
+    ejtest_expect_bool(&R, solved, true);
+
+    ejtest_expect_int(&R, beam.sections_count, 3);
+    ejtest_expect_float(&R, beam.wall_reaction_force, 1);
+    ejtest_expect_float(&R, beam.wall_reaction_moment, -1*0.75);
+
+    DynamicArrayAppend(&point_forces, ((PointForce){ .distance = 0.25, .force = 1}));
+    solved = solveBeam(
+            &beam,
+            point_forces.items, point_forces.count,
+            distributed_forces.items, distributed_forces.count
+            );
+
+
+    ejtest_expect_bool(&R, solved, true);
+
+    ejtest_expect_int(&R, beam.sections_count, 4);
+    ejtest_expect_float(&R, beam.wall_reaction_force, 2);
+    ejtest_expect_float(&R, beam.wall_reaction_moment, -1*0.75-1*0.25);
+} TEST_END();
+#define TEST_DIR_NAME "./tests"
+
+TEST_BEGIN(testDoubleSameSolve)
 {
     Beam beam = {0};
     beam.length = 1.0;

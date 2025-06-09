@@ -69,7 +69,6 @@ int main(int argc, const char * argv[])
         if(strcmp(argv[1], "test") == 0 && !build_tests()) return 1;
         else if(strcmp(argv[1], "gui") == 0 && !build_gui(cmd)) return 1;
         else if(strcmp(argv[1], "cli") == 0 && !build_cli()) return 1;
-        else printf("Unknown: %s\n", argv[1]);
     } else
     {
         if (!build_gui(cmd)) return 1;

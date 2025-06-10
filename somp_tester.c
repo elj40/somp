@@ -47,10 +47,12 @@ void testExample_6_7();
 void testDoubleSameSolve();
 void testDoubleDiffSolve();
 
+void testLineFromPoints();
 int main()
 {
 	testFloatComparison();
 	testLinkedLists();
+    testLineFromPoints();
 	testSeperateSections();
 
 	testWallReactionForce();
@@ -77,6 +79,71 @@ int main()
     bool R = true;\
     const char * test_name = #name;
 #define TEST_END() ejtest_print_result(test_name, R); }
+TEST_BEGIN(testLineFromPoints)
+{
+    //float ax, float ay, float bx, float by
+    // y = x
+    float m, c;
+    float ax, ay, bx, by;
+    ax = 1;
+    ay = ax;
+    bx = 3;
+    by = bx;
+
+    line_from_points(&m, &c, ax,ay,bx,by);
+    ejtest_expect_float(&R, m, 1);
+    ejtest_expect_float(&R, c, 0);
+
+    // y = 3x
+    ax = 1;
+    ay = 3*ax;
+    bx = 3;
+    by = 3*bx;
+
+    line_from_points(&m, &c, ax,ay,bx,by);
+    ejtest_expect_float(&R, m, 3);
+    ejtest_expect_float(&R, c, 0);
+
+    // y = x + 1
+    ax = 1;
+    ay = ax + 1;
+    bx = 3;
+    by = bx + 1;
+
+    line_from_points(&m, &c, ax,ay,bx,by);
+    ejtest_expect_float(&R, m, 1);
+    ejtest_expect_float(&R, c, 1);
+
+    // y = 5x + 4
+    ax = 1;
+    ay = 5*ax + 4;
+    bx = 3;
+    by = 5*bx + 4;
+
+    line_from_points(&m, &c, ax,ay,bx,by);
+    ejtest_expect_float(&R, m, 5);
+    ejtest_expect_float(&R, c, 4);
+
+    // y = -5x + 4
+    ax = 1;
+    ay = -5*ax + 4;
+    bx = 3;
+    by = -5*bx + 4;
+
+    line_from_points(&m, &c, ax,ay,bx,by);
+    ejtest_expect_float(&R, m, -5);
+    ejtest_expect_float(&R, c, 4);
+
+    // y = -5x - 4
+    ax = 1;
+    ay = -5*ax - 4;
+    bx = 3;
+    by = -5*bx - 4;
+
+    line_from_points(&m, &c, ax,ay,bx,by);
+    ejtest_expect_float(&R, m, -5);
+    ejtest_expect_float(&R, c, -4);
+} TEST_END();
 TEST_BEGIN(testDoubleDiffSolve)
 {
     Beam beam = {0};

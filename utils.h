@@ -44,6 +44,7 @@ float ArrayMaxf(float nums[], int n);
 // Misc
 int nearly_equal(float a, float b);
 void printInt(const void * i);
+void line_from_points(float * m, float * c, float ax, float ay, float bx, float by);
 
 // Generic linked list operations
 void LL_push(LL_Node ** head, void * data);
@@ -77,6 +78,15 @@ float ArrayMaxf(float nums[], int n)
 	return max;
 }
 
+float lerp(float a, float b, float t)
+{
+    return a*(1-t) + b*t;
+}
+void line_from_points(float * m, float * c, float ax, float ay, float bx, float by)
+{
+    if (m != NULL) *m = (by-ay)/(bx-ax);
+    if (c != NULL) *c = -((by-ay)/(bx-ax))*ax + ay;
+};
 int nearly_equal(float a, float b)
 {
 	return fabs(a - b) < EPSILON;

@@ -94,12 +94,23 @@ void ejsdl_render_arrow_vert(SDL_Renderer * sdl_renderer,
     SDL_RenderLine(sdl_renderer, x - EJSDL_ARROWH_W, y2 - arrow_head_length, x, y2);
 }
 
+float ejsdl_distrib_line_y(
+        float x,
+        SDL_FRect x_axis,
+        float max_value,
+        float polynomial[]
+        )
+{
+        float bx = lerp(0, max_value, (x-x_axis.x)/x_axis.w);
+        float y = x_axis.y - evalPolynomial(bx, polynomial);
+        return y;
+};
+
+#define COLOR_RED             255,   0,   0, 255
 #define COLOR_BLACK             0,   0,   0, 255
-#define COLOR_BLACK_CLEAR       0,   0,   0, 170
+#define COLOR_GRAY            100, 100, 100, 255
 #define COLOR_HIBB_BACKGROUND 255, 252, 233, 255
 #define COLOR_HIBB_BEAM        79, 167, 195, 255
-
-#define DISTRIB_STEP 4
 
 // Main loop, returns false to exit application
 bool somp_main(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
@@ -177,17 +188,38 @@ bool somp_main(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
         int x = beam_rect.x + (pf.distance/state->beam.length)*(beam_rect.w);
         ejsdl_render_arrow_vert(sdl_renderer, x, 0.1*sdl_window_height, beam_rect.y);
     }
-
+// to ensure distributed lines are aligned
+#define DISTRIB_VIEW_STEP 8
     for (int i = 0; i < state->distrib_forces.count; i++)
     {
+        // Render distributed force
         DistributedForce df = state->distrib_forces.items[i]; 
-        int x_start = beam_rect.x + (df.start/state->beam.length)*(beam_rect.w);
-        int x_end   = beam_rect.x + (df.end /state->beam.length)*(beam_rect.w);
-        for (int x = x_start; x <= x_end; x += DISTRIB_STEP)
+        int x_start = lerp(beam_rect.x, beam_rect.x+beam_rect.w, df.start/state->beam.length);
+        int x_end   = lerp(beam_rect.x, beam_rect.x+beam_rect.w, df.end  /state->beam.length);
+
+        float y = ejsdl_distrib_line_y(x_start, beam_rect, state->beam.length, df.polynomial);
+        SDL_RenderLine(sdl_renderer, x_start, y, x_start, y);
+
+        // Align all lines (I think its neater)
+        x_start +=  DISTRIB_VIEW_STEP - x_start % DISTRIB_VIEW_STEP;
+        int xp = x_start;
+        float yp = y;
+        for (int x = x_start; x <= x_end; x += DISTRIB_VIEW_STEP)
         {
-            int y = beam_rect.y - evalPolynomial(x-beam_rect.x, df.polynomial)*0.1;
+            y = ejsdl_distrib_line_y(x, beam_rect, state->beam.length, df.polynomial);
+            // Line to beam
             SDL_RenderLine(sdl_renderer, x, y, x, beam_rect.y);
+            // Line from previous
+            SDL_RenderLine(sdl_renderer, xp, yp, x, y);
+
+            xp = x;
+            yp = y;
         };
+        y = ejsdl_distrib_line_y(x_end, beam_rect, state->beam.length, df.polynomial);
+        // Line to beam
+        SDL_RenderLine(sdl_renderer, x_end, y, x_end, beam_rect.y);
+        // Line from previous
+        SDL_RenderLine(sdl_renderer, xp, yp, x_end, y);
     }
 
     switch (state->mode) {
@@ -195,7 +227,7 @@ bool somp_main(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
         float mouse_x, mouse_y;
         int mouse_button = SDL_GetMouseState(&mouse_x, &mouse_y);
 
-        SDL_SetRenderDrawColor(sdl_renderer, COLOR_BLACK_CLEAR);
+        SDL_SetRenderDrawColor(sdl_renderer, COLOR_GRAY);
         int x = MAX(beam_rect.x, MIN(mouse_x, beam_rect.x + beam_rect.w));
         ejsdl_render_arrow_vert(sdl_renderer, x, 0.1*sdl_window_height, beam_rect.y);
 

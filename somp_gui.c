@@ -189,21 +189,22 @@ bool somp_main(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
         ejsdl_render_arrow_vert(sdl_renderer, x, 0.1*sdl_window_height, beam_rect.y);
     }
 // to ensure distributed lines are aligned
-#define DISTRIB_VIEW_STEP 8
+#define DISTRIB_VIEW_STEP 18
     for (int i = 0; i < state->distrib_forces.count; i++)
     {
         // Render distributed force
-        DistributedForce df = state->distrib_forces.items[i]; 
+        DistributedForce df = state->distrib_forces.items[i];
         int x_start = lerp(beam_rect.x, beam_rect.x+beam_rect.w, df.start/state->beam.length);
         int x_end   = lerp(beam_rect.x, beam_rect.x+beam_rect.w, df.end  /state->beam.length);
 
         float y = ejsdl_distrib_line_y(x_start, beam_rect, state->beam.length, df.polynomial);
-        SDL_RenderLine(sdl_renderer, x_start, y, x_start, y);
 
-        // Align all lines (I think its neater)
-        x_start +=  DISTRIB_VIEW_STEP - x_start % DISTRIB_VIEW_STEP;
+        SDL_RenderLine(sdl_renderer, x_start, y, x_start, beam_rect.y);
+
         int xp = x_start;
         float yp = y;
+        // Align all lines (I think its neater)
+        x_start +=  DISTRIB_VIEW_STEP - x_start % DISTRIB_VIEW_STEP;
         for (int x = x_start; x <= x_end; x += DISTRIB_VIEW_STEP)
         {
             y = ejsdl_distrib_line_y(x, beam_rect, state->beam.length, df.polynomial);
@@ -231,13 +232,12 @@ bool somp_main(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
         int x = MAX(beam_rect.x, MIN(mouse_x, beam_rect.x + beam_rect.w));
         ejsdl_render_arrow_vert(sdl_renderer, x, 0.1*sdl_window_height, beam_rect.y);
 
-        if (mouse_button & SDL_BUTTON_LEFT)
+        if (mouse_button & SDL_BUTTON_LEFT && mouse_pressed)
         {
             float d = ((x-beam_rect.x)/beam_rect.w)*state->beam.length;
             float f = 1.0;
             PointForce p = { .distance=d, .force=f };
             DynamicArrayAppend(&state->point_forces, p);
-            state->mode = NORMAL;
             printf("Adding pointforce\n");
         }
     }; break;
@@ -260,12 +260,12 @@ bool somp_main(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
             int x_end   = MIN(beam_rect.x + beam_rect.w, mouse_x + DISTRIB_PREVIEW_LOOKAHEAD);
             for (int x = x_start; x <= x_end; x += DISTRIB_VIEW_STEP)
             {
-                int y = MIN(mouse_y, beam_rect.y - DISTRIB_PREVIEW_HEIGHT);
+                int y = mouse_y;
                 SDL_RenderLine(sdl_renderer, x, y, x, beam_rect.y);
             };
             if (mouse_button & SDL_BUTTON_LEFT && mouse_pressed)
             {
-                *dx_start = beam_rect.x + ((x_start-beam_rect.x)/beam_rect.w)*beam_rect.w;
+                *dx_start = x_start; //beam_rect.x + ((x_start-beam_rect.x)/beam_rect.w)*beam_rect.w;
                 *dy_start = mouse_y;
                 state->distributed_first_placed = true;
                 //printf("Placed first %f %f\n", *dx_start, *dy_start);

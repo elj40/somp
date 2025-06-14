@@ -23,6 +23,9 @@ typedef enum {
     NORMAL,
     ADD_POINT_FORCE,
     ADD_DISTRIBUTED,
+    MOD_POINT_FORCE,
+    MOD_DISTRIBUTED_START,
+    MOD_DISTRIBUTED_END  ,
 } Mode;
 
 typedef struct {
@@ -32,7 +35,15 @@ typedef struct {
     Mode mode;
     // For previewing the distributed load to be added
     bool distributed_first_placed;
-    SDL_FRect distrib_prev_se; // keeps start and end points
+    // keeps start and end points
+    SDL_FRect distrib_prev_se;
+
+    // Pointers to keep track of the current point or distributed force being
+    // modified
+    union {
+        PointForce * mod_point;
+        DistributedForce * mod_distrib;
+    };
 } somp_section_solve_t;
 
 typedef struct {
@@ -106,6 +117,7 @@ float ejsdl_distrib_line_y(
         return y;
 };
 
+#define COLOR_DEFAULT         COLOR_BLACK
 #define COLOR_RED             255,   0,   0, 255
 #define COLOR_BLACK             0,   0,   0, 255
 #define COLOR_GRAY            100, 100, 100, 255
@@ -224,6 +236,56 @@ bool somp_main(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
     }
 
     switch (state->mode) {
+    case NORMAL: {
+#define HIGHLIGHT_DISTANCE 5
+        float mouse_x, mouse_y;
+        int mouse_button = SDL_GetMouseState(&mouse_x, &mouse_y);
+
+        SDL_SetRenderDrawColor(sdl_renderer, COLOR_RED);
+        for (int i = 0; i < state->point_forces.count; i++)
+        {
+            PointForce pf = state->point_forces.items[i];
+            float fx = lerp(beam_rect.x, beam_rect.x+beam_rect.w, pf.distance/state->beam.length);
+            if (fabs(fx - mouse_x) < HIGHLIGHT_DISTANCE)
+            {
+                ejsdl_render_arrow_vert(sdl_renderer, fx, 0.1*sdl_window_height, beam_rect.y);
+                if (mouse_button & SDL_BUTTON_LEFT && mouse_pressed)
+                {
+                    state->mode = MOD_POINT_FORCE;
+                    state->mod_point = &state->point_forces.items[i];
+                }
+            };
+        };
+
+        for (int i = 0; i < state->distrib_forces.count; i++)
+        {
+            // Render distributed force
+            DistributedForce df = state->distrib_forces.items[i];
+            int x_start = lerp(beam_rect.x, beam_rect.x+beam_rect.w, df.start/state->beam.length);
+            int x_end   = lerp(beam_rect.x, beam_rect.x+beam_rect.w, df.end  /state->beam.length);
+
+            if (fabs(x_start - mouse_x) < HIGHLIGHT_DISTANCE)
+            {
+                float y = ejsdl_distrib_line_y(x_start, beam_rect, state->beam.length, df.polynomial);
+                SDL_RenderLine(sdl_renderer, x_start, y, x_start, beam_rect.y);
+                if (mouse_button & SDL_BUTTON_LEFT && mouse_pressed)
+                {
+                    state->mode = MOD_DISTRIBUTED_START;
+                    state->mod_distrib = &state->distrib_forces.items[i];
+                }
+            } else if (fabs(x_end - mouse_x) < HIGHLIGHT_DISTANCE)
+            {
+                float y = ejsdl_distrib_line_y(x_end, beam_rect, state->beam.length, df.polynomial);
+                SDL_RenderLine(sdl_renderer, x_end, y, x_end, beam_rect.y);
+                if (mouse_button & SDL_BUTTON_LEFT && mouse_pressed)
+                {
+                    state->mode = MOD_DISTRIBUTED_START;
+                    state->mod_distrib = &state->distrib_forces.items[i];
+                }
+            }
+        };
+        SDL_SetRenderDrawColor(sdl_renderer, COLOR_DEFAULT);
+    }; break;
     case ADD_POINT_FORCE: {
         float mouse_x, mouse_y;
         int mouse_button = SDL_GetMouseState(&mouse_x, &mouse_y);
@@ -268,7 +330,6 @@ bool somp_main(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
                 *dx_start = x_start; //beam_rect.x + ((x_start-beam_rect.x)/beam_rect.w)*beam_rect.w;
                 *dy_start = mouse_y;
                 state->distributed_first_placed = true;
-                //printf("Placed first %f %f\n", *dx_start, *dy_start);
             }
         } else
         {
@@ -313,7 +374,104 @@ bool somp_main(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
             }
         };
     }; break;
-    default: break;
+    case MOD_POINT_FORCE: {
+        float mouse_x, mouse_y;
+        int mouse_button = SDL_GetMouseState(&mouse_x, &mouse_y);
+        (void)mouse_button;
+
+        SDL_SetRenderDrawColor(sdl_renderer, COLOR_RED);
+        int x = MAX(beam_rect.x, MIN(mouse_x, beam_rect.x + beam_rect.w));
+        ejsdl_render_arrow_vert(sdl_renderer, x, 0.1*sdl_window_height, beam_rect.y);
+
+        float d = ((x-beam_rect.x)/beam_rect.w)*state->beam.length;
+        float f = 1.0;
+        state->mod_point->distance = d;
+        state->mod_point->force = f;
+        if (mouse_released)
+        {
+            state->mode = NORMAL;
+        }
+        SDL_SetRenderDrawColor(sdl_renderer, COLOR_DEFAULT);
+    }; break;
+    case MOD_DISTRIBUTED_START: {
+        float mouse_x, mouse_y;
+        int mouse_button = SDL_GetMouseState(&mouse_x, &mouse_y);
+        (void)mouse_button;
+
+        SDL_SetRenderDrawColor(sdl_renderer, COLOR_RED);
+
+        int x_start = MAX(beam_rect.x, MIN(mouse_x, beam_rect.x + beam_rect.w));
+        int y_start = mouse_y;
+        SDL_RenderLine(sdl_renderer, x_start, y_start, x_start, beam_rect.y);
+
+        float m;
+        float c;
+        float fs_x = x_start;
+        float fs_y = beam_rect.y - y_start;
+        float fe_x = state->mod_distrib->end;
+        float fe_y = evalPolynomial(fe_x, state->mod_distrib->polynomial);
+
+        // Reset polynomial
+        for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
+        {
+            state->mod_distrib->polynomial[i] = 0;
+        }
+        line_from_points(&m, &c, fs_x, fs_y, fe_x, fe_y);
+        state->mod_distrib->polynomial[0] = c;
+        state->mod_distrib->polynomial[1] = m;
+
+        if (mouse_released)
+        {
+            state->mode = NORMAL;
+        }
+        /*else
+        {
+            SDL_SetRenderDrawColor(sdl_renderer, COLOR_GRAY);
+            int x_start = *dx_start;
+            int x_end = MAX(beam_rect.x, MIN(mouse_x, beam_rect.x + beam_rect.w));
+            int y_start = *dy_start;
+            int y_end = mouse_y;
+            if (x_end < x_start) {
+                int t = x_end; x_end = x_start; x_start = t;
+                    t = y_end; y_end = y_start; y_start = t;
+            };
+            // Render distributed preview
+            for (float x = x_start; x <= x_end; x += DISTRIB_VIEW_STEP)
+            {
+                float t = (x-x_start)/(x_end-x_start);
+                int y = y_start + t*(y_end - y_start);
+                SDL_RenderLine(sdl_renderer, x, y, x, beam_rect.y);
+            }
+            if (mouse_released)
+            {
+                *dx_end = x_end;//beam_rect.x + ((x_start-beam_rect.x)/beam_rect.w)*state->beam.length;
+                *dy_end = y_end;//beam_rect.y - mouse_y;
+                float fs_x = lerp(0, state->beam.length, (x_start-beam_rect.x)/beam_rect.w);
+                float fs_y = beam_rect.y - y_start; //TODO: normalize for forces
+                float fe_x = lerp(0, state->beam.length, (x_end-beam_rect.x)/beam_rect.w);
+                float fe_y = beam_rect.y - y_end; //TODO: normalize for forces
+
+                printf("%f %f\n", fs_y, fe_y);
+
+                // y = mx + c
+                float m, c;
+                line_from_points(&m, &c, fs_x, fs_y, fe_x, fe_y);
+
+                DynamicArrayAppend(&state->distrib_forces,
+                        ((DistributedForce){ .start=fs_x, .end=fe_x, .polynomial={c,m}})
+                        );
+
+                printStructArray(state->distrib_forces.items, state->distrib_forces.count, sizeof(DistributedForce), printDF);
+
+                state->mode = NORMAL;
+            }
+        };*/
+    }; break;
+    default: {
+        printf("Unfinished mode: %d, entering NORMAL\n", state->mode);
+        state->mode = NORMAL;
+        break;
+    }
     }
 
     // ========================= SOLVE SECTION END ========================

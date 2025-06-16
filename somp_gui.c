@@ -117,6 +117,9 @@ float ejsdl_distrib_line_y(
         return y;
 };
 
+bool mouse_pressed = false;
+bool mouse_released = false;
+
 #define COLOR_DEFAULT         COLOR_BLACK
 #define COLOR_RED             255,   0,   0, 255
 #define COLOR_BLACK             0,   0,   0, 255
@@ -124,11 +127,11 @@ float ejsdl_distrib_line_y(
 #define COLOR_HIBB_BACKGROUND 255, 252, 233, 255
 #define COLOR_HIBB_BEAM        79, 167, 195, 255
 
+#include "modes/solve_normal.c"
+
 // Main loop, returns false to exit application
 bool somp_main(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
 {
-    bool mouse_pressed = false;
-    bool mouse_released = false;
 
     SDL_Event sdl_event;
     while (SDL_PollEvent(&sdl_event))
@@ -237,54 +240,7 @@ bool somp_main(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
 
     switch (state->mode) {
     case NORMAL: {
-#define HIGHLIGHT_DISTANCE 5
-        float mouse_x, mouse_y;
-        int mouse_button = SDL_GetMouseState(&mouse_x, &mouse_y);
-
-        SDL_SetRenderDrawColor(sdl_renderer, COLOR_RED);
-        for (int i = 0; i < state->point_forces.count; i++)
-        {
-            PointForce pf = state->point_forces.items[i];
-            float fx = lerp(beam_rect.x, beam_rect.x+beam_rect.w, pf.distance/state->beam.length);
-            if (fabs(fx - mouse_x) < HIGHLIGHT_DISTANCE)
-            {
-                ejsdl_render_arrow_vert(sdl_renderer, fx, 0.1*sdl_window_height, beam_rect.y);
-                if (mouse_button & SDL_BUTTON_LEFT && mouse_pressed)
-                {
-                    state->mode = MOD_POINT_FORCE;
-                    state->mod_point = &state->point_forces.items[i];
-                }
-            };
-        };
-
-        for (int i = 0; i < state->distrib_forces.count; i++)
-        {
-            // Render distributed force
-            DistributedForce df = state->distrib_forces.items[i];
-            int x_start = lerp(beam_rect.x, beam_rect.x+beam_rect.w, df.start/state->beam.length);
-            int x_end   = lerp(beam_rect.x, beam_rect.x+beam_rect.w, df.end  /state->beam.length);
-
-            if (fabs(x_start - mouse_x) < HIGHLIGHT_DISTANCE)
-            {
-                float y = ejsdl_distrib_line_y(x_start, beam_rect, state->beam.length, df.polynomial);
-                SDL_RenderLine(sdl_renderer, x_start, y, x_start, beam_rect.y);
-                if (mouse_button & SDL_BUTTON_LEFT && mouse_pressed)
-                {
-                    state->mode = MOD_DISTRIBUTED_START;
-                    state->mod_distrib = &state->distrib_forces.items[i];
-                }
-            } else if (fabs(x_end - mouse_x) < HIGHLIGHT_DISTANCE)
-            {
-                float y = ejsdl_distrib_line_y(x_end, beam_rect, state->beam.length, df.polynomial);
-                SDL_RenderLine(sdl_renderer, x_end, y, x_end, beam_rect.y);
-                if (mouse_button & SDL_BUTTON_LEFT && mouse_pressed)
-                {
-                    state->mode = MOD_DISTRIBUTED_START;
-                    state->mod_distrib = &state->distrib_forces.items[i];
-                }
-            }
-        };
-        SDL_SetRenderDrawColor(sdl_renderer, COLOR_DEFAULT);
+        somp_solve_normal(sdl_renderer, beam_rect);
     }; break;
     case ADD_POINT_FORCE: {
         float mouse_x, mouse_y;

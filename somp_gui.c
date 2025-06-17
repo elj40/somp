@@ -398,7 +398,6 @@ bool somp_main(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
         (void)mouse_button;
 
         SDL_SetRenderDrawColor(sdl_renderer, COLOR_RED);
-
         int x_end = MAX(beam_rect.x, MIN(mouse_x, beam_rect.x + beam_rect.w));
         int y_end = mouse_y;
         SDL_RenderLine(sdl_renderer, x_end, y_end, x_end, beam_rect.y);
@@ -412,7 +411,7 @@ bool somp_main(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
         float fs_x = state->mod_distrib->start;
         float fs_y = evalPolynomial(fs_x, state->mod_distrib->polynomial);
 
-        if (fs_x >= fe_x)
+        if (fs_x > fe_x)
         {
             state->mod_distrib->end = state->mod_distrib->start;
             state->mode = MOD_DISTRIBUTED_START;
@@ -420,7 +419,7 @@ bool somp_main(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
             break;
         }
 
-        if (nearly_equal(fs_x, fs_y)) break;
+        if (nearly_equal(fs_x, fe_x)) break;
 
         // Reset polynomial
         for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)

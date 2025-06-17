@@ -62,7 +62,7 @@ void somp_solve_normal(SDL_Renderer * sdl_renderer, SDL_FRect beam_rect)
             SDL_RenderLine(sdl_renderer, x_end, y, x_end, beam_rect.y);
             if (mouse_button & SDL_BUTTON_LEFT && mouse_pressed)
             {
-                S->mode = MOD_DISTRIBUTED_START;
+                S->mode = MOD_DISTRIBUTED_END;
                 S->mod_distrib = &S->distrib_forces.items[i];
             }else if (keyboard_state[SDL_SCANCODE_X])
             {

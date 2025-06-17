@@ -26,6 +26,12 @@
         (da)->count++; \
     } while(0); 
 
+#define shift_array(arr, start, end) do { \
+    for (int shift_array_index = start; shift_array_index < end; shift_array_index++) { \
+        (arr)[shift_array_index] = (arr)[shift_array_index+1]; \
+    } \
+} while (0); \
+
 #define MIN(a, b) ((a) < (b)) ? (a) : (b)
 #define MAX(a, b) ((a) > (b)) ? (a) : (b)
 

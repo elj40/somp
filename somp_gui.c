@@ -454,7 +454,6 @@ bool somp_main(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
 
     mouse_pressed = false;
     mouse_released = false;
-
     return true;
 }
 

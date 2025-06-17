@@ -25,6 +25,7 @@
  
 void testLinkedLists();
 void testFloatComparison();
+void testShiftArray();
 
 void testSeperateSections();
 
@@ -53,6 +54,7 @@ int main()
 	testFloatComparison();
 	testLinkedLists();
     testLineFromPoints();
+    testShiftArray();
 	testSeperateSections();
 
 	testWallReactionForce();
@@ -79,6 +81,18 @@ int main()
     bool R = true;\
     const char * test_name = #name;
 #define TEST_END() ejtest_print_result(test_name, R); }
+TEST_BEGIN(testShiftArray)
+{
+    int arr[] = {0,1,2,3,4,5};
+    ejtest_expect_int(&R, arr[0], 0);
+    shift_array(arr, 0, 6);
+    // {1,2,3,4,5};
+    ejtest_expect_int(&R, arr[0], 1);
+    shift_array(arr, 1, 4);
+    ejtest_expect_int(&R, arr[1], 3);
+
+} TEST_END();
+
 TEST_BEGIN(testLineFromPoints)
 {
     //float ax, float ay, float bx, float by

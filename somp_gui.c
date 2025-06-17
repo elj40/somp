@@ -73,8 +73,6 @@ void somp_init(void * state)
 
     b->length = 1.0;
     b->sections_count = MAX_SECTIONS;
-
-    DynamicArrayAppend(dfs , ((DistributedForce){ .start=0.0, .end=0.33, .polynomial={ 0, 1 } }));
 };
 
 void somp_reload(void * state, SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
@@ -362,66 +360,84 @@ bool somp_main(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
 
         float m;
         float c;
-        float fs_x = x_start;
+        float fs_x = lerp(0, state->beam.length, (x_start-beam_rect.x)/beam_rect.w);
         float fs_y = beam_rect.y - y_start;
         float fe_x = state->mod_distrib->end;
         float fe_y = evalPolynomial(fe_x, state->mod_distrib->polynomial);
+
+        if (fs_x >= fe_x)
+        {
+            state->mod_distrib->start = state->mod_distrib->end;
+            state->mode = MOD_DISTRIBUTED_END;
+            printf("Switch to MOD_DISTRIBUTED_END\n");
+            break;
+        }
+
+        // We don't want funky things with divide by infinties;
+        if (nearly_equal(fs_x, fe_x)) break;
+        // Reset polynomial
+        for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
+        {
+            state->mod_distrib->polynomial[i] = 0;
+        }
+
+        line_from_points(&m, &c, fs_x, fs_y, fe_x, fe_y);
+        state->mod_distrib->polynomial[0] = c;
+        state->mod_distrib->polynomial[1] = m;
+
+        state->mod_distrib->start = fs_x;
+
+        if (mouse_released)
+        {
+            state->mode = NORMAL;
+        }
+    }; break;
+    case MOD_DISTRIBUTED_END: {
+        float mouse_x, mouse_y;
+        int mouse_button = SDL_GetMouseState(&mouse_x, &mouse_y);
+        (void)mouse_button;
+
+        SDL_SetRenderDrawColor(sdl_renderer, COLOR_RED);
+
+        int x_end = MAX(beam_rect.x, MIN(mouse_x, beam_rect.x + beam_rect.w));
+        int y_end = mouse_y;
+        SDL_RenderLine(sdl_renderer, x_end, y_end, x_end, beam_rect.y);
+
+        float m = 0;
+        float c = 0;
+
+        float fe_x = lerp(0, state->beam.length, (x_end-beam_rect.x)/beam_rect.w);
+        float fe_y = beam_rect.y - y_end;
+
+        float fs_x = state->mod_distrib->start;
+        float fs_y = evalPolynomial(fs_x, state->mod_distrib->polynomial);
+
+        if (fs_x >= fe_x)
+        {
+            state->mod_distrib->end = state->mod_distrib->start;
+            state->mode = MOD_DISTRIBUTED_START;
+            printf("Switch to MOD_DISTRIBUTED_START\n");
+            break;
+        }
+
+        if (nearly_equal(fs_x, fs_y)) break;
 
         // Reset polynomial
         for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
         {
             state->mod_distrib->polynomial[i] = 0;
         }
+
         line_from_points(&m, &c, fs_x, fs_y, fe_x, fe_y);
         state->mod_distrib->polynomial[0] = c;
         state->mod_distrib->polynomial[1] = m;
+
+        state->mod_distrib->end = fe_x;
 
         if (mouse_released)
         {
             state->mode = NORMAL;
         }
-        /*else
-        {
-            SDL_SetRenderDrawColor(sdl_renderer, COLOR_GRAY);
-            int x_start = *dx_start;
-            int x_end = MAX(beam_rect.x, MIN(mouse_x, beam_rect.x + beam_rect.w));
-            int y_start = *dy_start;
-            int y_end = mouse_y;
-            if (x_end < x_start) {
-                int t = x_end; x_end = x_start; x_start = t;
-                    t = y_end; y_end = y_start; y_start = t;
-            };
-            // Render distributed preview
-            for (float x = x_start; x <= x_end; x += DISTRIB_VIEW_STEP)
-            {
-                float t = (x-x_start)/(x_end-x_start);
-                int y = y_start + t*(y_end - y_start);
-                SDL_RenderLine(sdl_renderer, x, y, x, beam_rect.y);
-            }
-            if (mouse_released)
-            {
-                *dx_end = x_end;//beam_rect.x + ((x_start-beam_rect.x)/beam_rect.w)*state->beam.length;
-                *dy_end = y_end;//beam_rect.y - mouse_y;
-                float fs_x = lerp(0, state->beam.length, (x_start-beam_rect.x)/beam_rect.w);
-                float fs_y = beam_rect.y - y_start; //TODO: normalize for forces
-                float fe_x = lerp(0, state->beam.length, (x_end-beam_rect.x)/beam_rect.w);
-                float fe_y = beam_rect.y - y_end; //TODO: normalize for forces
-
-                printf("%f %f\n", fs_y, fe_y);
-
-                // y = mx + c
-                float m, c;
-                line_from_points(&m, &c, fs_x, fs_y, fe_x, fe_y);
-
-                DynamicArrayAppend(&state->distrib_forces,
-                        ((DistributedForce){ .start=fs_x, .end=fe_x, .polynomial={c,m}})
-                        );
-
-                printStructArray(state->distrib_forces.items, state->distrib_forces.count, sizeof(DistributedForce), printDF);
-
-                state->mode = NORMAL;
-            }
-        };*/
     }; break;
     default: {
         printf("Unfinished mode: %d, entering NORMAL\n", state->mode);

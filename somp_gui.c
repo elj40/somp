@@ -29,13 +29,29 @@ typedef enum {
 } Mode;
 
 typedef struct {
+    int r, g, b, a;
+
+    int unit;
+} ObjectRender;
+
+typedef struct {
+    ObjectRender * items;
+    int count;
+    int capacity;
+} ObjectRenders;
+
+typedef struct {
     Beam beam;
     PointForces point_forces;
     DistributedForces distrib_forces;
     Mode mode;
+
+    ObjectRenders point_renders;
+    ObjectRenders distrib_renders;
+
     // For previewing the distributed load to be added
     bool distributed_first_placed;
-    // keeps start and end points
+    // keeps start and end points of distributed preview
     SDL_FRect distrib_prev_se;
 
     // Pointers to keep track of the current point or distributed force being
@@ -70,6 +86,12 @@ void somp_init(void * state)
 
     *pfs = (PointForces){0};
     *dfs = (DistributedForces){0};
+
+    ObjectRenders * pfr = &somp_state->section.solve.point_renders;
+    ObjectRenders * dfr = &somp_state->section.solve.distrib_renders;
+
+    *pfr = (ObjectRenders){0};
+    *dfr = (ObjectRenders){0};
 
     b->length = 1.0;
     b->sections_count = MAX_SECTIONS;
@@ -149,7 +171,9 @@ void somp_solve_normal(SDL_Renderer * sdl_renderer, SDL_FRect beam_rect)
             } else if (keyboard_state[SDL_SCANCODE_X])
             {
                 shift_array(S->point_forces.items, i, S->point_forces.count)
+                shift_array(S->point_renders.items, i, S->point_forces.count)
                 S->point_forces.count--;
+                S->point_renders.count--;
                 return;
             };
         };
@@ -174,8 +198,10 @@ void somp_solve_normal(SDL_Renderer * sdl_renderer, SDL_FRect beam_rect)
             {
                 // shift elements after this up by one
                 shift_array(S->distrib_forces.items, i, S->distrib_forces.count)
+                shift_array(S->distrib_renders.items, i, S->distrib_forces.count)
                 // decrease count by one
                 S->distrib_forces.count--;
+                S->distrib_renders.count--;
             };
 
         } else if (fabs(x_end - mouse_x) < HIGHLIGHT_DISTANCE)
@@ -258,6 +284,7 @@ bool somp_main(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
     SDL_SetRenderDrawColor(sdl_renderer, COLOR_HIBB_BACKGROUND);
     SDL_RenderClear(sdl_renderer);
 
+    // Render beam and wall
     SDL_FRect beam_rect = { 0.1*sdl_window_width, 0.5*sdl_window_height, 0.5*sdl_window_width, 10 };
     SDL_SetRenderDrawColor(sdl_renderer, COLOR_HIBB_BEAM);
     SDL_RenderFillRect(sdl_renderer, &beam_rect);
@@ -267,13 +294,16 @@ bool somp_main(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
     SDL_SetRenderDrawColor(sdl_renderer, COLOR_BLACK);
     SDL_RenderLine(sdl_renderer, beam_rect.x, 0.1*sdl_window_height, beam_rect.x, 0.9*sdl_window_height);
 
+    // Render point forces
     for (int i = 0; i < state->point_forces.count; i++)
     {
         PointForce pf = state->point_forces.items[i];
         int x = beam_rect.x + (pf.distance/state->beam.length)*(beam_rect.w);
         ejsdl_render_arrow_vert(sdl_renderer, x, 0.1*sdl_window_height, beam_rect.y);
     }
-// to ensure distributed lines are aligned
+    SDL_SetRenderDrawColor(sdl_renderer, COLOR_DEFAULT);
+
+    // Render distiributed forces
 #define DISTRIB_VIEW_STEP 18
     for (int i = 0; i < state->distrib_forces.count; i++)
     {
@@ -325,7 +355,9 @@ bool somp_main(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
             float d = ((x-beam_rect.x)/beam_rect.w)*state->beam.length;
             float f = 1.0;
             PointForce p = { .distance=d, .force=f };
+            ObjectRender r = { COLOR_DEFAULT, 1 };
             DynamicArrayAppend(&state->point_forces, p);
+            DynamicArrayAppend(&state->point_renders, r);
             printf("Adding pointforce\n");
         }
     }; break;
@@ -393,6 +425,8 @@ bool somp_main(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
                 DynamicArrayAppend(&state->distrib_forces,
                         ((DistributedForce){ .start=fs_x, .end=fe_x, .polynomial={c,m}})
                         );
+                ObjectRender r = { COLOR_DEFAULT, 1 };
+                DynamicArrayAppend(&state->distrib_renders, r);
 
                 printStructArray(state->distrib_forces.items, state->distrib_forces.count, sizeof(DistributedForce), printDF);
 

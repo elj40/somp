@@ -6,6 +6,7 @@
 
 # SDL
 SDL/
+SDL3_ttf-3.2.2/
 
 # Prerequisites
 *.d

@@ -19,9 +19,9 @@
 #define WINDOW_HEIGHT (WINDOW_WIDTH/ASPECT_RATIO)
 #define WINDOW_TITLE "SOMP"
 
-typedef void* module_init_t(void * state);
-typedef void* module_reload_t(void * state, SDL_Window * sdl_window, SDL_Renderer * sdl_renderer);
-typedef void* module_main_t(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer);
+typedef void* module_init_t(void * state, SDL_Window * w, SDL_Renderer * r, TTF_TextEngine * t);
+typedef void* module_reload_t(void * state);
+typedef void* module_main_t();
 typedef void* module_close_t();
 
 typedef struct {
@@ -77,18 +77,19 @@ int main()
     if (!SDL_Init(SDL_INIT_VIDEO)) goto cleanup;
     if (
             !(sdl_window = SDL_CreateWindow(
-                    WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT, 
+                    WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT,
                     SDL_WINDOW_RESIZABLE|SDL_WINDOW_ALWAYS_ON_TOP)
              )
        ) goto cleanup;
 
     if (!(sdl_renderer = SDL_CreateRenderer(sdl_window, NULL))) goto cleanup;
     if (!TTF_Init()) goto cleanup;
+    SDL_SetRenderDrawColor(sdl_renderer, 0,0,0,255);
     if (!(sdl_text_engine = TTF_CreateRendererTextEngine(sdl_renderer))) goto cleanup;
 
     SompModule somp = {0};
     load_module(&somp);
-    somp.init(somp.state);
+    somp.init(somp.state, sdl_window, sdl_renderer, sdl_text_engine);
 
     bool quit = false;
     bool reloaded_once = false;
@@ -99,12 +100,12 @@ int main()
         {
             somp.state = somp.close();
             if (!load_module(&somp)) quit = true;
-            somp.reload(somp.state, sdl_window, sdl_renderer);
+            somp.reload(somp.state);
             reloaded_once = true;
         }
         else if (!key_state[SDL_SCANCODE_H]) reloaded_once = false;
 
-        if (!somp.main(sdl_window, sdl_renderer)) quit = true;
+        if (!somp.main()) quit = true;
     };
 
 cleanup:

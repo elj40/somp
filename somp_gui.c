@@ -76,15 +76,18 @@ typedef struct {
 SompState * somp_state;
 int sdl_window_width, sdl_window_height;
 
-void somp_init(void * state)
+void somp_init(void * state, SDL_Window * w, SDL_Renderer * r, TTF_TextEngine * t)
 {
 // IMPORTANT: This will only work on my machine, find a way to get this font or default font on machine
 // TODO
 #define FONT_FILE "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf"
-#define FONT_SIZE 24
+#define FONT_SIZE 48
     if (state) somp_state = (SompState *) state;
     else somp_state = malloc(sizeof(SompState));
 
+    somp_state->window      = w;
+    somp_state->renderer    = r;
+    somp_state->text_engine = t;
     somp_state->section.solve.distributed_first_placed = false;
 
     Beam * b = &somp_state->section.solve.beam;
@@ -106,19 +109,21 @@ void somp_init(void * state)
     somp_state->font = TTF_OpenFont(FONT_FILE, FONT_SIZE);
 };
 
-void somp_reload(void * state, SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
+void somp_reload(void * state)
 {
-    (void)sdl_renderer;
     if (state) somp_state = (SompState *) state;
-    else somp_state = malloc(sizeof(SompState));
+    else {
+        SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Expected state to not be NULL. Run somp_init before this function\n");
+        return;
+    }
 
-    SDL_GetWindowSize(sdl_window, &sdl_window_width, &sdl_window_height);
-    printf("Reload\n");
+    SDL_GetWindowSize(somp_state->window, &sdl_window_width, &sdl_window_height);
+    printf("SOMP: Hot Reload\n");
 };
 
 void * somp_close()
 {
-    TTF_CloseFont(somp_state->font);
+    //TTF_CloseFont(somp_state->font);
     return somp_state;
 };
 
@@ -148,6 +153,15 @@ float ejsdl_distrib_line_y(
         return y;
 };
 
+SDL_Rect ejsdl_center_rect(int x, int y, int w, int h)
+{
+    return (SDL_Rect) { .x = x - w/2, .y = y - h/2, .w = w, .h = h, };
+}
+SDL_FRect ejsdl_center_frect(float x, float y, float w, float h)
+{
+    return (SDL_FRect) { .x = x - w/2, .y = y - h/2, .w = w, .h = h, };
+}
+
 bool mouse_pressed = false;
 bool mouse_released = false;
 
@@ -157,6 +171,29 @@ bool mouse_released = false;
 #define COLOR_GRAY            100, 100, 100, 255
 #define COLOR_HIBB_BACKGROUND 255, 252, 233, 255
 #define COLOR_HIBB_BEAM        79, 167, 195, 255
+
+#define EJSDL_COLOR(color) (SDL_Color){ color }
+
+void ejsdl_render_text(SDL_Renderer * sdl_renderer, const char * text, float x, float y, SDL_Color color)
+{
+    SDL_Surface * surface = TTF_RenderText_Solid(somp_state->font, text, 0, color);
+    SDL_Texture * texture = SDL_CreateTextureFromSurface(sdl_renderer, surface);
+
+    const SDL_FRect dstrect = { x, y, texture->w, texture->h };
+
+    SDL_RenderTexture(sdl_renderer, texture, NULL, &dstrect);
+    SDL_DestroySurface(surface);
+    SDL_DestroyTexture(texture);
+};
+void ejsdl_render_text_sized(SDL_Renderer * sdl_renderer, const char * text, SDL_FRect dstrect, SDL_Color color)
+{
+    SDL_Surface * surface = TTF_RenderText_Solid(somp_state->font, text, 0, color);
+    SDL_Texture * texture = SDL_CreateTextureFromSurface(sdl_renderer, surface);
+
+    SDL_RenderTexture(sdl_renderer, texture, NULL, &dstrect);
+    SDL_DestroySurface(surface);
+    SDL_DestroyTexture(texture);
+};
 
 void somp_solve_normal(SDL_Renderer * sdl_renderer, SDL_FRect beam_rect)
 {
@@ -236,9 +273,10 @@ void somp_solve_normal(SDL_Renderer * sdl_renderer, SDL_FRect beam_rect)
 }
 
 // Main loop, returns false to exit application
-bool somp_main(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
+bool somp_main()
 {
-
+    SDL_Window     * sdl_window      = somp_state->window;
+    SDL_Renderer   * sdl_renderer    = somp_state->renderer;
     SDL_Event sdl_event;
     while (SDL_PollEvent(&sdl_event))
     {
@@ -293,6 +331,9 @@ bool somp_main(SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
     somp_section_solve_t * state = &somp_state->section.solve;
     SDL_SetRenderDrawColor(sdl_renderer, COLOR_HIBB_BACKGROUND);
     SDL_RenderClear(sdl_renderer);
+
+    ejsdl_render_text      (sdl_renderer, "SOMP", sdl_window_width/2, 10, (SDL_Color){ COLOR_BLACK });
+    ejsdl_render_text_sized(sdl_renderer, "Hello", (SDL_FRect){ 30, 50, 100, FONT_SIZE}, EJSDL_COLOR(COLOR_BLACK) );
 
     // Render beam and wall
     SDL_FRect beam_rect = { 0.1*sdl_window_width, 0.5*sdl_window_height, 0.5*sdl_window_width, 10 };

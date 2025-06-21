@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 #define SOMP_LOGIC_IMPLEMENTATION
 #include "somp_logic.h"
@@ -65,6 +66,8 @@ typedef struct {
 typedef struct {
     SDL_Window * window;
     SDL_Renderer * renderer;
+    TTF_TextEngine * text_engine;
+    TTF_Font * font;
     struct {
         somp_section_solve_t solve;
     } section;
@@ -75,6 +78,10 @@ int sdl_window_width, sdl_window_height;
 
 void somp_init(void * state)
 {
+// IMPORTANT: This will only work on my machine, find a way to get this font or default font on machine
+// TODO
+#define FONT_FILE "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf"
+#define FONT_SIZE 24
     if (state) somp_state = (SompState *) state;
     else somp_state = malloc(sizeof(SompState));
 
@@ -95,6 +102,8 @@ void somp_init(void * state)
 
     b->length = 1.0;
     b->sections_count = MAX_SECTIONS;
+
+    somp_state->font = TTF_OpenFont(FONT_FILE, FONT_SIZE);
 };
 
 void somp_reload(void * state, SDL_Window * sdl_window, SDL_Renderer * sdl_renderer)
@@ -109,6 +118,7 @@ void somp_reload(void * state, SDL_Window * sdl_window, SDL_Renderer * sdl_rende
 
 void * somp_close()
 {
+    TTF_CloseFont(somp_state->font);
     return somp_state;
 };
 

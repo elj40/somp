@@ -12,6 +12,7 @@
 #include <dlfcn.h>
 
 #include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 #define ASPECT_RATIO (16.0/9.0)
 #define WINDOW_WIDTH 400
@@ -71,6 +72,7 @@ int main()
 {
     SDL_Window * sdl_window = NULL;
     SDL_Renderer * sdl_renderer = NULL;
+    TTF_TextEngine * sdl_text_engine = NULL;
 
     if (!SDL_Init(SDL_INIT_VIDEO)) goto cleanup;
     if (
@@ -79,7 +81,10 @@ int main()
                     SDL_WINDOW_RESIZABLE|SDL_WINDOW_ALWAYS_ON_TOP)
              )
        ) goto cleanup;
+
     if (!(sdl_renderer = SDL_CreateRenderer(sdl_window, NULL))) goto cleanup;
+    if (!TTF_Init()) goto cleanup;
+    if (!(sdl_text_engine = TTF_CreateRendererTextEngine(sdl_renderer))) goto cleanup;
 
     SompModule somp = {0};
     load_module(&somp);
@@ -103,6 +108,8 @@ int main()
     };
 
 cleanup:
+    TTF_DestroyRendererTextEngine(sdl_text_engine);
+    TTF_Quit();
     SDL_Quit();
     SDL_DestroyRenderer(sdl_renderer);
     SDL_DestroyWindow(sdl_window);

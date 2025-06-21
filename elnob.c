@@ -35,15 +35,17 @@ bool build_gui(Command cmd)
     elnob_cmd_append_many(&cmd, "gcc","-Wall","-Wextra","-ggdb");
     elnob_cmd_append_many(&cmd, "-o","somp_gui.out","somp_gui.c");
     elnob_cmd_append_many(&cmd, "-L./SDL/build/", "-I./SDL/include");
-    elnob_cmd_append_many(&cmd, "-Wl,-rpath,./SDL/build");
+    elnob_cmd_append_many(&cmd, "-L./SDL3_ttf-3.2.2/build/", "-I./SDL3_ttf-3.2.2/include/");
+    elnob_cmd_append_many(&cmd, "-Wl,-rpath,./SDL/build,./SDL3_ttf-3.2.2/build/");
     elnob_cmd_append_many(&cmd, "-lSDL3", "-lm");
     if (!elnob_run_command_sync(cmd)) return false;
 #else
     elnob_cmd_append_many(&cmd, "gcc", "-fPIC", "-shared", "-Wall","-Wextra","-ggdb");
     elnob_cmd_append_many(&cmd, "-o","somp_gui.so","somp_gui.c");
     elnob_cmd_append_many(&cmd, "-L./SDL/build/", "-I./SDL/include");
-    elnob_cmd_append_many(&cmd, "-Wl,-rpath,./SDL/build");
-    elnob_cmd_append_many(&cmd, "-lSDL3", "-lm");
+    elnob_cmd_append_many(&cmd, "-L./SDL3_ttf-3.2.2/build/", "-I./SDL3_ttf-3.2.2/include/");
+    elnob_cmd_append_many(&cmd, "-Wl,-rpath,./SDL/build:./SDL3_ttf-3.2.2/build/");
+    elnob_cmd_append_many(&cmd, "-lSDL3", "-lSDL3_ttf", "-lm");
     elnob_cmd_append_many(&cmd, "-DSDL_MAIN_HANDLED");
     if (!elnob_run_command_sync(cmd)) return false;
 

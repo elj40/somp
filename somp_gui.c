@@ -383,12 +383,23 @@ bool somp_main()
     SDL_SetRenderDrawColor(sdl_renderer, COLOR_BLACK);
     SDL_RenderLine(sdl_renderer, beam_rect.x, 0.1*sdl_window_height, beam_rect.x, 0.9*sdl_window_height);
 
+#define POINT_FORCE_ARROW_START (0.1*sdl_window_height)
     // Render point forces
+    char force_text[32];
+    const int forces_font_size = 16;
+    TTF_SetFontSize(somp_state->font, forces_font_size);
     for (int i = 0; i < state->point_forces.count; i++)
     {
         PointForce pf = state->point_forces.items[i];
+        ObjectRender pr = state->point_renders.items[i];
+
         int x = beam_rect.x + (pf.distance/state->beam.length)*(beam_rect.w);
-        ejsdl_render_arrow_vert(sdl_renderer, x, 0.1*sdl_window_height, beam_rect.y);
+        ejsdl_render_arrow_vert(sdl_renderer, x, POINT_FORCE_ARROW_START, beam_rect.y);
+
+        const char * unit = (pr.unit == 1) ? "N" : "kN";
+        snprintf(force_text, ArrayCount(force_text), "%.1f %s", pf.force, unit);
+
+        ejsdl_render_text_centered(sdl_renderer, force_text, x, POINT_FORCE_ARROW_START - forces_font_size, EJSDL_COLOR(COLOR_DEFAULT));
     }
     SDL_SetRenderDrawColor(sdl_renderer, COLOR_DEFAULT);
 
@@ -437,13 +448,24 @@ bool somp_main()
 
         SDL_SetRenderDrawColor(sdl_renderer, COLOR_GRAY);
         int x = MAX(beam_rect.x, MIN(mouse_x, beam_rect.x + beam_rect.w));
-        ejsdl_render_arrow_vert(sdl_renderer, x, 0.1*sdl_window_height, beam_rect.y);
+        ejsdl_render_arrow_vert(sdl_renderer, x, POINT_FORCE_ARROW_START, beam_rect.y);
+
+        // TODO: figure out unit system
+        // TODO: extract out all the constants
+        // TODO: decide on a function to determine the new force
+        char force_text[32];
+        const char * new_unit = "N"; // Should be whatever the user set it to (N or kN or MN)
+        const float new_force = 0.1*pow(beam_rect.y - mouse_y, 2);
+        snprintf(force_text, ArrayCount(force_text), "%.1f %s", new_force, new_unit);
+
+        const int forces_font_size = 16;
+        TTF_SetFontSize(somp_state->font, forces_font_size);
+        ejsdl_render_text_centered(sdl_renderer, force_text, x, POINT_FORCE_ARROW_START - forces_font_size, EJSDL_COLOR(COLOR_DEFAULT));
 
         if (mouse_button & SDL_BUTTON_LEFT && mouse_pressed)
         {
             float d = ((x-beam_rect.x)/beam_rect.w)*state->beam.length;
-            float f = 1.0;
-            PointForce p = { .distance=d, .force=f };
+            PointForce p = { .distance=d, .force=new_force };
             ObjectRender r = { COLOR_DEFAULT, 1 };
             DynamicArrayAppend(&state->point_forces, p);
             DynamicArrayAppend(&state->point_renders, r);

@@ -64,9 +64,16 @@ typedef struct {
 } somp_section_solve_t;
 
 typedef struct {
+    TTF_Font * liberation_serif_regl12;
+    TTF_Font * liberation_serif_regl24;
+    TTF_Font * liberation_serif_regl48;
+} SompFonts;
+
+typedef struct {
     SDL_Window * window;
     SDL_Renderer * renderer;
     TTF_TextEngine * text_engine;
+    SompFonts fonts;
     TTF_Font * font;
     struct {
         somp_section_solve_t solve;
@@ -80,7 +87,7 @@ void somp_init(void * state, SDL_Window * w, SDL_Renderer * r, TTF_TextEngine * 
 {
 // IMPORTANT: This will only work on my machine, find a way to get this font or default font on machine
 // TODO
-#define FONT_FILE "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf"
+#define LIBERATION_SERIF_FILE "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf"
 #define FONT_SIZE 48
     if (state) somp_state = (SompState *) state;
     else somp_state = malloc(sizeof(SompState));
@@ -106,8 +113,12 @@ void somp_init(void * state, SDL_Window * w, SDL_Renderer * r, TTF_TextEngine * 
     b->length = 1.0;
     b->sections_count = MAX_SECTIONS;
 
-    somp_state->font = TTF_OpenFont(FONT_FILE, FONT_SIZE);
-};
+    somp_state->fonts.liberation_serif_regl12 = TTF_OpenFont(LIBERATION_SERIF_FILE, 12);
+    somp_state->fonts.liberation_serif_regl24 = TTF_OpenFont(LIBERATION_SERIF_FILE, 24);
+    somp_state->fonts.liberation_serif_regl48 = TTF_OpenFont(LIBERATION_SERIF_FILE, 48);
+
+    somp_state->font = somp_state->fonts.liberation_serif_regl48;
+}
 
 void somp_reload(void * state)
 {
@@ -119,6 +130,7 @@ void somp_reload(void * state)
 
     SDL_GetWindowSize(somp_state->window, &sdl_window_width, &sdl_window_height);
     printf("SOMP: Hot Reload\n");
+    somp_state->font = somp_state->fonts.liberation_serif_regl48;
 };
 
 void * somp_close()
@@ -185,10 +197,33 @@ void ejsdl_render_text(SDL_Renderer * sdl_renderer, const char * text, float x, 
     SDL_DestroySurface(surface);
     SDL_DestroyTexture(texture);
 };
+void ejsdl_render_text_centered(SDL_Renderer * sdl_renderer, const char * text, float x, float y, SDL_Color color)
+{
+    SDL_Surface * surface = TTF_RenderText_Solid(somp_state->font, text, 0, color);
+    SDL_Texture * texture = SDL_CreateTextureFromSurface(sdl_renderer, surface);
+
+    const SDL_FRect dstrect = { x-texture->w/2, y-texture->h/2, texture->w, texture->h };
+
+    SDL_RenderTexture(sdl_renderer, texture, NULL, &dstrect);
+    SDL_DestroySurface(surface);
+    SDL_DestroyTexture(texture);
+};
 void ejsdl_render_text_sized(SDL_Renderer * sdl_renderer, const char * text, SDL_FRect dstrect, SDL_Color color)
 {
     SDL_Surface * surface = TTF_RenderText_Solid(somp_state->font, text, 0, color);
     SDL_Texture * texture = SDL_CreateTextureFromSurface(sdl_renderer, surface);
+
+    SDL_RenderTexture(sdl_renderer, texture, NULL, &dstrect);
+    SDL_DestroySurface(surface);
+    SDL_DestroyTexture(texture);
+};
+void ejsdl_render_text_sized_auto(SDL_Renderer * sdl_renderer, const char * text, SDL_FRect dstrect, SDL_Color color)
+{
+    SDL_Surface * surface = TTF_RenderText_Solid(somp_state->font, text, 0, color);
+    SDL_Texture * texture = SDL_CreateTextureFromSurface(sdl_renderer, surface);
+
+    if (nearly_equal(dstrect.w, 0)) dstrect.w = texture->w;
+    if (nearly_equal(dstrect.h, 0)) dstrect.h = texture->h;
 
     SDL_RenderTexture(sdl_renderer, texture, NULL, &dstrect);
     SDL_DestroySurface(surface);
@@ -332,8 +367,11 @@ bool somp_main()
     SDL_SetRenderDrawColor(sdl_renderer, COLOR_HIBB_BACKGROUND);
     SDL_RenderClear(sdl_renderer);
 
-    ejsdl_render_text      (sdl_renderer, "SOMP", sdl_window_width/2, 10, (SDL_Color){ COLOR_BLACK });
-    ejsdl_render_text_sized(sdl_renderer, "Hello", (SDL_FRect){ 30, 50, 100, FONT_SIZE}, EJSDL_COLOR(COLOR_BLACK) );
+    TTF_SetFontSize(somp_state->font, 72);
+    ejsdl_render_text (sdl_renderer, "SOMP", sdl_window_width/2, 10, EJSDL_COLOR(COLOR_BLACK));
+
+    TTF_SetFontSize(somp_state->font, sdl_window_height*0.1);
+    ejsdl_render_text(sdl_renderer, "Hello", sdl_window_width/2, 100, EJSDL_COLOR(COLOR_RED));
 
     // Render beam and wall
     SDL_FRect beam_rect = { 0.1*sdl_window_width, 0.5*sdl_window_height, 0.5*sdl_window_width, 10 };

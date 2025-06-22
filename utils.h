@@ -88,6 +88,10 @@ float lerp(float a, float b, float t)
 {
     return a*(1-t) + b*t;
 }
+float invlerp(float a, float b, float x)
+{
+    return (x-a)/(b-a);
+}
 void line_from_points(float * m, float * c, float ax, float ay, float bx, float by)
 {
     if (m != NULL) *m = (by-ay)/(bx-ax);

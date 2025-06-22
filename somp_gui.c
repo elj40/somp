@@ -101,6 +101,9 @@ void somp_init(void * state, SDL_Window * w, SDL_Renderer * r, TTF_TextEngine * 
     PointForces * pfs = &somp_state->section.solve.point_forces;
     DistributedForces * dfs = &somp_state->section.solve.distrib_forces;
 
+    b->length = 1.0;
+    b->sections_count = MAX_SECTIONS;
+
     *pfs = (PointForces){0};
     *dfs = (DistributedForces){0};
 
@@ -110,8 +113,6 @@ void somp_init(void * state, SDL_Window * w, SDL_Renderer * r, TTF_TextEngine * 
     *pfr = (ObjectRenders){0};
     *dfr = (ObjectRenders){0};
 
-    b->length = 1.0;
-    b->sections_count = MAX_SECTIONS;
 
     somp_state->fonts.liberation_serif_regl12 = TTF_OpenFont(LIBERATION_SERIF_FILE, 12);
     somp_state->fonts.liberation_serif_regl24 = TTF_OpenFont(LIBERATION_SERIF_FILE, 24);
@@ -130,7 +131,6 @@ void somp_reload(void * state)
 
     SDL_GetWindowSize(somp_state->window, &sdl_window_width, &sdl_window_height);
     printf("SOMP: Hot Reload\n");
-    somp_state->font = somp_state->fonts.liberation_serif_regl48;
 };
 
 void * somp_close()
@@ -153,7 +153,7 @@ void ejsdl_render_arrow_vert(SDL_Renderer * sdl_renderer,
     SDL_RenderLine(sdl_renderer, x - EJSDL_ARROWH_W, y2 - arrow_head_length, x, y2);
 }
 
-float ejsdl_distrib_line_y(
+float somp_distrib_line_y(
         float x,
         SDL_FRect x_axis,
         float max_value,
@@ -270,7 +270,7 @@ void somp_solve_normal(SDL_Renderer * sdl_renderer, SDL_FRect beam_rect)
 
         if (fabs(x_start - mouse_x) < HIGHLIGHT_DISTANCE)
         {
-            float y = ejsdl_distrib_line_y(x_start, beam_rect, S->beam.length, df.polynomial);
+            float y = somp_distrib_line_y(x_start, beam_rect, S->beam.length, df.polynomial);
             SDL_RenderLine(sdl_renderer, x_start, y, x_start, beam_rect.y);
             if (mouse_button & SDL_BUTTON_LEFT && mouse_pressed)
             {
@@ -288,7 +288,7 @@ void somp_solve_normal(SDL_Renderer * sdl_renderer, SDL_FRect beam_rect)
 
         } else if (fabs(x_end - mouse_x) < HIGHLIGHT_DISTANCE)
         {
-            float y = ejsdl_distrib_line_y(x_end, beam_rect, S->beam.length, df.polynomial);
+            float y = somp_distrib_line_y(x_end, beam_rect, S->beam.length, df.polynomial);
             SDL_RenderLine(sdl_renderer, x_end, y, x_end, beam_rect.y);
             if (mouse_button & SDL_BUTTON_LEFT && mouse_pressed)
             {
@@ -383,6 +383,7 @@ bool somp_main()
     SDL_SetRenderDrawColor(sdl_renderer, COLOR_BLACK);
     SDL_RenderLine(sdl_renderer, beam_rect.x, 0.1*sdl_window_height, beam_rect.x, 0.9*sdl_window_height);
 
+    //TODO: extract drawing things to their own functions
 #define POINT_FORCE_ARROW_START (0.1*sdl_window_height)
     // Render point forces
     char force_text[32];
@@ -412,7 +413,7 @@ bool somp_main()
         int x_start = lerp(beam_rect.x, beam_rect.x+beam_rect.w, df.start/state->beam.length);
         int x_end   = lerp(beam_rect.x, beam_rect.x+beam_rect.w, df.end  /state->beam.length);
 
-        float y = ejsdl_distrib_line_y(x_start, beam_rect, state->beam.length, df.polynomial);
+        float y = somp_distrib_line_y(x_start, beam_rect, state->beam.length, df.polynomial);
 
         SDL_RenderLine(sdl_renderer, x_start, y, x_start, beam_rect.y);
 
@@ -422,7 +423,7 @@ bool somp_main()
         x_start +=  DISTRIB_VIEW_STEP - x_start % DISTRIB_VIEW_STEP;
         for (int x = x_start; x <= x_end; x += DISTRIB_VIEW_STEP)
         {
-            y = ejsdl_distrib_line_y(x, beam_rect, state->beam.length, df.polynomial);
+            y = somp_distrib_line_y(x, beam_rect, state->beam.length, df.polynomial);
             // Line to beam
             SDL_RenderLine(sdl_renderer, x, y, x, beam_rect.y);
             // Line from previous
@@ -431,7 +432,7 @@ bool somp_main()
             xp = x;
             yp = y;
         };
-        y = ejsdl_distrib_line_y(x_end, beam_rect, state->beam.length, df.polynomial);
+        y = somp_distrib_line_y(x_end, beam_rect, state->beam.length, df.polynomial);
         // Line to beam
         SDL_RenderLine(sdl_renderer, x_end, y, x_end, beam_rect.y);
         // Line from previous

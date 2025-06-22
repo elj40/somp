@@ -100,7 +100,7 @@ int main()
         {
             somp.state = somp.close();
             if (!load_module(&somp)) quit = true;
-            somp.reload(somp.state);
+            if (!somp.reload(somp.state)) quit = true;
             reloaded_once = true;
         }
         else if (!key_state[SDL_SCANCODE_H]) reloaded_once = false;

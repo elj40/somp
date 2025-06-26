@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 #define SOMP_LOGIC_IMPLEMENTATION
 #include "somp_logic.h"
@@ -74,6 +75,7 @@ typedef struct {
 typedef struct {
     SDL_Window * window;
     SDL_Renderer * renderer;
+    TTF_Font * font;
 
     somp_section_solve_t solve;
 } SompState;
@@ -85,16 +87,18 @@ SompGui gui = {0};
 void gui_init(SompGui * const gui);
 
 // ==================== HOT RELOAD FUNCS ================================
-bool somp_init(void * state, SDL_Window * window, SDL_Renderer * renderer, ...)
+//bool somp_init(void * state, SDL_Window * window, SDL_Renderer * renderer, TTF_TextEngine * text_engine)
+bool somp_init(void * state, SDL_Window * window, SDL_Renderer * renderer,...)
 {
     if (!state) somp_state = malloc(sizeof(SompState));
     else somp_state = state;
 
     somp_state->window = window;
     somp_state->renderer = renderer;
+    //somp_state->text_engine = text_engine;
 
-    //DynamicArrayAppend(&somp_state->solve.point_forces, ((PointForce){ .distance=0.000000, .force=38.728027 }));
-
+#define LIBERATION_SERIF_FILE "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf"
+    somp_state->font = TTF_OpenFont(LIBERATION_SERIF_FILE, 48);
     somp_state->solve.beam.length = 1.0;
     somp_state->solve.beam.sections_count = MAX_SECTIONS;
     gui_init(&gui);
@@ -160,6 +164,18 @@ void render_arrow_vert(SDL_Renderer * sdl_renderer,
     SDL_RenderLine(sdl_renderer, x + head_width, y2 - arrow_head_length, x, y2);
     SDL_RenderLine(sdl_renderer, x - head_width, y2 - arrow_head_length, x, y2);
 }
+void text(SDL_Renderer * sdl_renderer, const char * text, float x, float y,
+        SDL_Color color)
+{
+    SDL_Surface * surface = TTF_RenderText_Solid(somp_state->font, text, 0, color);
+    SDL_Texture * texture = SDL_CreateTextureFromSurface(sdl_renderer, surface);
+
+    const SDL_FRect dstrect = { x, y, texture->w, texture->h };
+
+    SDL_RenderTexture(sdl_renderer, texture, NULL, &dstrect);
+    SDL_DestroySurface(surface);
+    SDL_DestroyTexture(texture);
+};
 void render_beam(SompBoundary beam_bound)
 {
     SDL_FRect beam_rect = { beam_bound.x, beam_bound.y + 0.5*beam_bound.h, beam_bound.w, 10 };
@@ -183,6 +199,11 @@ void render_point_force(SompBoundary beam_bound, SompBeam beam, SompPointForce *
     int arrow_x  = lerp(beam_bound.x, beam_bound.x+beam_bound.w, invlerp(0, beam.length, pf->distance)); // 1.
     int arrow_ys = (pf->force > 0) ? beam_bound.y : beam_bound.y+beam_bound.h; // 1.
     int arrow_ye = beam_bound.y + beam_bound.h/2 + ((pf->force > 0) ? 0 : 10);   // 2.
+
+    char buf[32];
+    snprintf(buf, 32, "%.1f", pf->force);
+    TTF_SetFontSize(somp_state->font, 14);
+    text(somp_state->renderer, buf, arrow_x, arrow_ys, EJSDL_COLOR(COLOR_BLACK));
 
     SDL_FRect hover_rect = {
         arrow_x - hl_distance,

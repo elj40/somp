@@ -35,6 +35,15 @@
 #define MIN(a, b) ((a) < (b)) ? (a) : (b)
 #define MAX(a, b) ((a) > (b)) ? (a) : (b)
 
+float minf(float a, float b)
+{
+    return (a < b) ? a : b;
+};
+float maxf(float a, float b)
+{
+    return (a > b) ? a : b;
+};
+
 struct LL_Node
 {
 	void * data;

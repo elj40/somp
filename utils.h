@@ -101,6 +101,12 @@ float invlerp(float a, float b, float x)
 {
     return (x-a)/(b-a);
 }
+// Maps a value in range [a,b] to range [c,d]
+float mapf(float val, float a, float b, float c, float d)
+{
+    return lerp(c, d, invlerp(a, b, val));
+};
+
 void line_from_points(float * m, float * c, float ax, float ay, float bx, float by)
 {
     if (m != NULL) *m = (by-ay)/(bx-ax);

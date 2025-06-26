@@ -20,7 +20,7 @@
 #define COLOR_HIBB_BACKGROUND 255, 252, 233, 255
 #define COLOR_HIBB_BEAM        79, 167, 195, 255
 #define EJSDL_COLOR(color) (SDL_Color){ color }
-#define EXPAND_COLOR(color) color.r, color.g, color.b, color.a
+#define EXPAND_COLOR(color) (color).r, (color).g, (color).b, (color).a
 
 typedef SDL_FRect             SompBoundary;
 typedef Beam                  SompBeam;
@@ -47,6 +47,7 @@ typedef enum {
     ADD_POINT_FORCE,
     ADD_DISTRIB_FORCE,
     MOD_POINT_FORCE,
+    MOD_DISTR_FORCE,
     MOD_DISTR_FORCE_START,
     MOD_DISTR_FORCE_END,
 } SolveMode;
@@ -57,8 +58,8 @@ typedef struct {
     SompDistrForces distr_forces;
 
     union {
-        SompPointForce temp_point_force;
-        SompDistrForce temp_distr_force;
+        SompPointForce * mod_point_force;
+        SompDistrForce * mod_distr_force;
     };
     bool distributed_first_placed;
 
@@ -119,6 +120,8 @@ SompState * somp_close()
 };
 // ======================================================================
 // ====================== SOLVE SECTION =================================
+void mod_distr_force_enter(const SompBoundary beam_bound, const SompBeam beam, SompDistrForce * distr_force);
+
 #define swap(x,y,type) do { type t = (x); x = y; y = t; } while(0)
 float px_to_force(float y, SompBoundary bound)
 {
@@ -134,9 +137,6 @@ bool hover(const SompBoundary bound)
     SDL_FPoint mouse = { gui.mouse_x, gui.mouse_y };
     //SDL_RenderRect(somp_state->renderer, &bound);
     return SDL_PointInRectFloat(&mouse, &bound);
-    //SDL_RenderRect(somp_state->renderer, &rect);
-    //int mx = gui.mouse_x, my = gui.mouse_y;
-    //return (x <= mx && mx <= x+w) && (y <= my && my <= y+h);
 }
 float force_to_px(float force, SompBoundary bound)
 {
@@ -171,17 +171,18 @@ void render_beam(SompBoundary beam_bound)
     SDL_SetRenderDrawColor(somp_state->renderer, COLOR_BLACK);
     SDL_RenderLine(somp_state->renderer, beam_bound.x, beam_bound.y, beam_rect.x, beam_bound.y+beam_bound.h);
 };
-void render_point_force(SompBoundary beam_bound, SompBeam beam, SompPointForce pf, SDL_Color color)
+void render_point_force(SompBoundary beam_bound, SompBeam beam, SompPointForce * pf, SDL_Color color)
 {
+    somp_section_solve_t * const S = &somp_state->solve;
     // TODO: magic numbers
     const int hl_distance = 4;
     // Assumptions in this function
     //  1. Beam rendered in centre of beam_bound
     //  2. Beam width = 10
     //  3. Arrow head width is same everywhere
-    int arrow_x  = lerp(beam_bound.x, beam_bound.x+beam_bound.w, invlerp(0, beam.length, pf.distance)); // 1.
-    int arrow_ys = (pf.force > 0) ? beam_bound.y : beam_bound.y+beam_bound.h; // 1.
-    int arrow_ye = beam_bound.y + beam_bound.h/2 + ((pf.force > 0) ? 0 : 10);   // 2.
+    int arrow_x  = lerp(beam_bound.x, beam_bound.x+beam_bound.w, invlerp(0, beam.length, pf->distance)); // 1.
+    int arrow_ys = (pf->force > 0) ? beam_bound.y : beam_bound.y+beam_bound.h; // 1.
+    int arrow_ye = beam_bound.y + beam_bound.h/2 + ((pf->force > 0) ? 0 : 10);   // 2.
 
     SDL_FRect hover_rect = {
         arrow_x - hl_distance,
@@ -190,17 +191,31 @@ void render_point_force(SompBoundary beam_bound, SompBeam beam, SompPointForce p
         abs(arrow_ye - arrow_ys)
     };
     if (hover(hover_rect))
+    {
         SDL_SetRenderDrawColor(somp_state->renderer, COLOR_HIGHLIGHT);
-    else
+        if (gui.mouse_pressed && gui.mouse_state == SDL_BUTTON_LEFT)
+        {
+            S->mode = MOD_POINT_FORCE;
+            S->mod_point_force = pf;
+        }
+    } else
+    {
         SDL_SetRenderDrawColor(somp_state->renderer, color.r, color.g, color.b, color.a);
+    }
+
+    // Always highlighted when modifying
+    if (S->mode == MOD_POINT_FORCE && nearly_equal(pf->distance, S->mod_point_force->distance))
+    {
+        SDL_SetRenderDrawColor(somp_state->renderer, COLOR_HIGHLIGHT);
+    }
     render_arrow_vert(somp_state->renderer, arrow_x, arrow_ys, arrow_ye, 5); // 3.
 };
 
-void render_point_forces(const SompBoundary beam_bound, const SompBeam beam, const SompPointForces point_forces)
+void render_point_forces(const SompBoundary beam_bound, const SompBeam beam, const SompPointForces * point_forces)
 {
-    for (int i = 0; i < point_forces.count; i++)
+    for (int i = 0; i < point_forces->count; i++)
     {
-        render_point_force(beam_bound, beam, point_forces.items[i], EJSDL_COLOR(COLOR_DEFAULT));
+        render_point_force(beam_bound, beam, &point_forces->items[i], EJSDL_COLOR(COLOR_DEFAULT));
     };
 }
 // TODO: I want polynomial parameter to be const but evalPolynomial takes a
@@ -258,26 +273,33 @@ void render_phony_distr_force(SompBoundary beam_bound,
     SDL_RenderLine(somp_state->renderer, xe, line_ys, xp, yp);
     SDL_RenderLine(somp_state->renderer, xe, line_ys, xe, line_ye);
 }
-void distr_side(SDL_FRect hover_rect, SDL_Color default_color, SDL_Color hl_color)
+void distr_side(SDL_FRect hover_rect,
+        const SompBoundary beam_bound, const SompBeam beam, SompDistrForce * df,
+        SDL_Color default_color, SDL_Color hl_color)
 {
+    SDL_Color * color = &default_color;
     if (hover(hover_rect)) {
-        SDL_SetRenderDrawColor(somp_state->renderer, EXPAND_COLOR(hl_color));
+        color = &hl_color;
+        if (gui.mouse_pressed && gui.mouse_state == SDL_BUTTON_LEFT) {
+            mod_distr_force_enter(beam_bound, beam, df);
+        }
     }
-    else SDL_SetRenderDrawColor(somp_state->renderer, EXPAND_COLOR(default_color));
+    else color = &default_color;
+    SDL_SetRenderDrawColor(somp_state->renderer, EXPAND_COLOR(*color));
 
 }
-void render_distr_force(SompBoundary beam_bound, SompBeam beam, SompDistrForce df, SDL_Color color)
+void render_distr_force(const SompBoundary beam_bound, const SompBeam beam, SompDistrForce * df, SDL_Color color)
 {
     // TODO: magic number
     const int distr_preview_step = 16;
     const int hl_dist_x = 4;
     //const int hl_dist_y = 4;
 
-    int x_start = lerp(beam_bound.x, beam_bound.x+beam_bound.w, invlerp(0, beam.length, df.start));
-    int x_end   = lerp(beam_bound.x, beam_bound.x+beam_bound.w, invlerp(0, beam.length, df.end  ));
+    int x_start = lerp(beam_bound.x, beam_bound.x+beam_bound.w, invlerp(0, beam.length, df->start));
+    int x_end   = lerp(beam_bound.x, beam_bound.x+beam_bound.w, invlerp(0, beam.length, df->end  ));
 
     float line_ys, line_ye;
-    get_distr_line_heights(&line_ys, &line_ye, beam_bound, df.polynomial, df.start);
+    get_distr_line_heights(&line_ys, &line_ye, beam_bound, df->polynomial, df->start);
 
     // Start
     SompBoundary hover_rect;
@@ -287,7 +309,7 @@ void render_distr_force(SompBoundary beam_bound, SompBeam beam, SompDistrForce d
         hl_dist_x*2,
         fabsf(line_ye-line_ys)
     };
-    distr_side(hover_rect, color, EJSDL_COLOR(COLOR_HIGHLIGHT));
+    distr_side(hover_rect, beam_bound, beam, df, color, EJSDL_COLOR(COLOR_HIGHLIGHT));
     SDL_RenderLine(somp_state->renderer, x_start, line_ys, x_start, line_ye);
 
     SDL_SetRenderDrawColor(somp_state->renderer, color.r, color.g, color.b, color.a);
@@ -298,7 +320,7 @@ void render_distr_force(SompBoundary beam_bound, SompBeam beam, SompDistrForce d
     for (int x = x_start; x <= x_end; x += distr_preview_step)
     {
         float dist = lerp(0, beam.length, invlerp(beam_bound.x, beam_bound.x+beam_bound.w, x));
-        get_distr_line_heights(&line_ys, &line_ye, beam_bound, df.polynomial, dist);
+        get_distr_line_heights(&line_ys, &line_ye, beam_bound, df->polynomial, dist);
         SDL_RenderLine(somp_state->renderer, x, line_ys, xp, yp);
         SDL_RenderLine(somp_state->renderer,
                 x, line_ys,
@@ -308,7 +330,7 @@ void render_distr_force(SompBoundary beam_bound, SompBeam beam, SompDistrForce d
         yp = line_ys;
     }
 
-    get_distr_line_heights(&line_ys, &line_ye, beam_bound, df.polynomial, df.end);
+    get_distr_line_heights(&line_ys, &line_ye, beam_bound, df->polynomial, df->end);
     SDL_RenderLine(somp_state->renderer, x_end, line_ys, xp, yp);
 
     // End
@@ -318,15 +340,15 @@ void render_distr_force(SompBoundary beam_bound, SompBeam beam, SompDistrForce d
         hl_dist_x*2,
         fabsf(line_ye-line_ys)
     };
-    distr_side(hover_rect, color, EJSDL_COLOR(COLOR_HIGHLIGHT));
+    distr_side(hover_rect, beam_bound, beam, df, color, EJSDL_COLOR(COLOR_HIGHLIGHT));
     SDL_RenderLine(somp_state->renderer, x_end, line_ys, x_end, line_ye);
 
 }
-void render_distr_forces(SompBoundary beam_bound, SompBeam beam, SompDistrForces distr_forces)
+void render_distr_forces(const SompBoundary beam_bound, const SompBeam beam, const SompDistrForces * distr_forces)
 {
-    for (int i = 0; i < distr_forces.count; i++)
+    for (int i = 0; i < distr_forces->count; i++)
     {
-        render_distr_force(beam_bound, beam, distr_forces.items[i], EJSDL_COLOR(COLOR_DEFAULT));
+        render_distr_force(beam_bound, beam, &distr_forces->items[i], EJSDL_COLOR(COLOR_DEFAULT));
     };
 }
 bool normal(SompBoundary beam_bound, const SompPointForces * point_forces, const SompDistrForces * distr_forces) 
@@ -348,7 +370,7 @@ bool add_point_force(SompBoundary beam_bound, const SompBeam beam, SompPointForc
     new_force.distance = lerp(0, beam.length, invlerp(beam_bound.x, beam_bound.x+beam_bound.w, new_force_x));
 
 
-    render_point_force(beam_bound, beam, new_force, EJSDL_COLOR(COLOR_PREVIEW));
+    render_point_force(beam_bound, beam, &new_force, EJSDL_COLOR(COLOR_PREVIEW));
 
     if (gui.mouse_pressed && gui.mouse_state == SDL_BUTTON_LEFT)
     {
@@ -432,10 +454,20 @@ bool add_distr_force(SompBoundary beam_bound, SompBeam beam, SompDistrForces * d
     render_phony_distr_force(beam_bound, *xs, *ys, *xe, *ye, EJSDL_COLOR(COLOR_PREVIEW));
     return true;
 }
-bool mod_point_force(SompBoundary beam_bound, SompPointForce * point_force)
+bool mod_point_force(SompBoundary beam_bound, SompBeam beam, SompPointForce * new_force)
 {
-    (void)beam_bound;
-    (void)point_force;
+    // ======================================================================
+    float new_force_x = MIN(beam_bound.x+beam_bound.w, MAX(beam_bound.x, gui.mouse_x));
+    float new_force_y = gui.mouse_y;
+
+    new_force->force    = px_to_force(new_force_y, beam_bound);
+    new_force->distance = lerp(0, beam.length, invlerp(beam_bound.x, beam_bound.x+beam_bound.w, new_force_x));
+
+    if (gui.mouse_released)
+    {
+        somp_state->solve.mode = NORMAL;
+    };
+//======================================================================
 
     return true;
 }
@@ -453,6 +485,88 @@ bool mod_distr_force_end(SompBoundary beam_bound, SompDistrForce * distr_force)
 
     return true;
 }
+// This function sets things up for mod_distr_force since there is the trouble
+// of the start and the end, we need to calculate whether we are modding the
+// start or the end
+void mod_distr_force_enter(const SompBoundary beam_bound, const SompBeam beam, SompDistrForce * distr_force)
+{
+    somp_section_solve_t * const S = &somp_state->solve;
+    float xs, xe;
+    float * x_select, * y_select;
+
+    xs = mapf(distr_force->start, 0, beam.length, beam_bound.x, beam_bound.x+beam_bound.w);
+    xe = mapf(distr_force->end  , 0, beam.length, beam_bound.x, beam_bound.x+beam_bound.w);
+
+    float start_dist = fabsf(xs - gui.mouse_x);
+    float end_dist   = fabsf(xe - gui.mouse_x);
+
+    x_select = &S->temp_floats[0];
+    y_select = &S->temp_floats[1];
+
+    if (start_dist <= end_dist)
+    {
+        *x_select = xe;
+        *y_select = force_to_px(evalPolynomial(distr_force->end, distr_force->polynomial), beam_bound);
+    } else
+    {
+        *x_select = xs;
+        *y_select = force_to_px(evalPolynomial(distr_force->start, distr_force->polynomial), beam_bound);
+    }
+
+
+    S->mode = MOD_DISTR_FORCE;
+    S->mod_distr_force = distr_force;
+};
+bool mod_distr_force(const SompBoundary beam_bound, const SompBeam beam, SompDistrForce * distr_force)
+{
+    somp_section_solve_t * const S = &somp_state->solve;
+    float * xs, * ys;
+    float * xe, * ye;
+
+    // Order important here since they relate to the enter function
+    xs = &S->temp_floats[0];
+    ys = &S->temp_floats[1];
+
+    xe = &S->temp_floats[2];
+    ye = &S->temp_floats[3];
+
+    *xe = maxf(beam_bound.x, minf(beam_bound.x + beam_bound.w, gui.mouse_x));
+    *ye = gui.mouse_y;
+
+    if (*xe <= *xs) {
+        swap(xs, xe, float *);
+        swap(ys, ye, float *);
+    };
+
+    printf("*xs *ys *xe *ye: ");
+    printf("%4.1f ", *xs);
+    printf("%4.1f ", *ys);
+    printf("%4.1f ", *xe);
+    printf("%4.1f\n", *ye);
+
+    float fxs, fys, fxe, fye;
+
+    fxs = mapf(*xs, beam_bound.x, beam_bound.x+beam_bound.w, 0, beam.length);
+    fys = px_to_force(*ys, beam_bound);
+    fxe = mapf(*xe, beam_bound.x, beam_bound.x+beam_bound.w, 0, beam.length);
+    fye = px_to_force(*ye, beam_bound);
+
+    // y = mx + c
+    float m, c;
+    line_from_points(&m, &c, fxs, fys, fxe, fye);
+
+    distr_force->start = fxs;
+    distr_force->end   = fxe;
+    distr_force->polynomial[0] = c;
+    distr_force->polynomial[1] = m;
+
+    if (gui.mouse_released)
+    {
+        S->mode = NORMAL;
+    }
+
+    return true;
+}
 
 bool somp_section_solve(SompBoundary boundary)
 {
@@ -467,16 +581,17 @@ bool somp_section_solve(SompBoundary boundary)
     SompDistrForces * distr_forces = &state->distr_forces;
 
     render_beam(beam_boundary);
-    render_point_forces(beam_boundary, *beam, *point_forces);
-    render_distr_forces(beam_boundary, *beam, *distr_forces);
+    render_point_forces(beam_boundary, *beam, point_forces);
+    render_distr_forces(beam_boundary, *beam, distr_forces);
 
     switch (state->mode) {
     case NORMAL:                  normal(beam_boundary, point_forces, distr_forces); break;
     case ADD_POINT_FORCE:         add_point_force(beam_boundary, *beam, point_forces); break;
     case ADD_DISTRIB_FORCE:       add_distr_force(beam_boundary, *beam, distr_forces); break;
-    case MOD_POINT_FORCE:         mod_point_force(beam_boundary, &state->temp_point_force); break;
-    case MOD_DISTR_FORCE_START:   mod_distr_force_start(beam_boundary, &state->temp_distr_force); break;
-    case MOD_DISTR_FORCE_END:     mod_distr_force_end  (beam_boundary, &state->temp_distr_force); break;
+    case MOD_POINT_FORCE:         mod_point_force(beam_boundary, *beam, state->mod_point_force); break;
+    case MOD_DISTR_FORCE:         mod_distr_force(beam_boundary, *beam, state->mod_distr_force); break;
+    //case MOD_DISTR_FORCE_START:   mod_distr_force_start(beam_boundary, &state->temp_distr_force); break;
+    //case MOD_DISTR_FORCE_END:     mod_distr_force_end  (beam_boundary, &state->temp_distr_force); break;
     default: {
         somp_loginfo(SDL_LOG_CATEGORY_APPLICATION, "Unknown mode, switching to NORMAL\n");
         state->mode = NORMAL;

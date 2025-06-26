@@ -193,7 +193,7 @@ void render_point_force(SompBoundary beam_bound, SompBeam beam, SompPointForce *
     if (hover(hover_rect))
     {
         SDL_SetRenderDrawColor(somp_state->renderer, COLOR_HIGHLIGHT);
-        if (gui.mouse_pressed && gui.mouse_state == SDL_BUTTON_LEFT)
+        if (gui.mouse_pressed && gui.mouse_state == SDL_BUTTON_LEFT && S->mode == NORMAL)
         {
             S->mode = MOD_POINT_FORCE;
             S->mod_point_force = pf;
@@ -280,7 +280,7 @@ void distr_side(SDL_FRect hover_rect,
     SDL_Color * color = &default_color;
     if (hover(hover_rect)) {
         color = &hl_color;
-        if (gui.mouse_pressed && gui.mouse_state == SDL_BUTTON_LEFT) {
+        if (gui.mouse_pressed && gui.mouse_state == SDL_BUTTON_LEFT && somp_state->solve.mode == NORMAL) {
             mod_distr_force_enter(beam_bound, beam, df);
         }
     }
@@ -374,7 +374,7 @@ bool add_point_force(SompBoundary beam_bound, const SompBeam beam, SompPointForc
 
     if (gui.mouse_pressed && gui.mouse_state == SDL_BUTTON_LEFT)
     {
-        printf("Adding point force\n");
+        somp_loginfo(SDL_LOG_CATEGORY_APPLICATION, "Point force added\n");
         DynamicArrayAppend(point_forces, new_force);
     };
 
@@ -444,9 +444,7 @@ bool add_distr_force(SompBoundary beam_bound, SompBeam beam, SompDistrForces * d
             S->distributed_first_placed = false;
             S->mode = NORMAL;
 
-            printf("%f %d\n", beam.length, beam.sections_count);
-            printDF(&df);
-            printf("Adding distributed force\n");
+            somp_loginfo(SDL_LOG_CATEGORY_APPLICATION, "Distributed force added\n");
         }
 
     }
@@ -456,32 +454,16 @@ bool add_distr_force(SompBoundary beam_bound, SompBeam beam, SompDistrForces * d
 }
 bool mod_point_force(SompBoundary beam_bound, SompBeam beam, SompPointForce * new_force)
 {
-    // ======================================================================
     float new_force_x = MIN(beam_bound.x+beam_bound.w, MAX(beam_bound.x, gui.mouse_x));
     float new_force_y = gui.mouse_y;
 
     new_force->force    = px_to_force(new_force_y, beam_bound);
-    new_force->distance = lerp(0, beam.length, invlerp(beam_bound.x, beam_bound.x+beam_bound.w, new_force_x));
+    new_force->distance = mapf(new_force_x, beam_bound.x, beam_bound.x+beam_bound.w, 0, beam.length);
 
     if (gui.mouse_released)
     {
         somp_state->solve.mode = NORMAL;
     };
-//======================================================================
-
-    return true;
-}
-bool mod_distr_force_start(SompBoundary beam_bound, SompDistrForce * distr_force)
-{
-    (void)beam_bound;
-    (void)distr_force;
-
-    return true;
-}
-bool mod_distr_force_end(SompBoundary beam_bound, SompDistrForce * distr_force)
-{
-    (void)beam_bound;
-    (void)distr_force;
 
     return true;
 }
@@ -538,12 +520,6 @@ bool mod_distr_force(const SompBoundary beam_bound, const SompBeam beam, SompDis
         swap(ys, ye, float *);
     };
 
-    printf("*xs *ys *xe *ye: ");
-    printf("%4.1f ", *xs);
-    printf("%4.1f ", *ys);
-    printf("%4.1f ", *xe);
-    printf("%4.1f\n", *ye);
-
     float fxs, fys, fxe, fye;
 
     fxs = mapf(*xs, beam_bound.x, beam_bound.x+beam_bound.w, 0, beam.length);
@@ -590,8 +566,6 @@ bool somp_section_solve(SompBoundary boundary)
     case ADD_DISTRIB_FORCE:       add_distr_force(beam_boundary, *beam, distr_forces); break;
     case MOD_POINT_FORCE:         mod_point_force(beam_boundary, *beam, state->mod_point_force); break;
     case MOD_DISTR_FORCE:         mod_distr_force(beam_boundary, *beam, state->mod_distr_force); break;
-    //case MOD_DISTR_FORCE_START:   mod_distr_force_start(beam_boundary, &state->temp_distr_force); break;
-    //case MOD_DISTR_FORCE_END:     mod_distr_force_end  (beam_boundary, &state->temp_distr_force); break;
     default: {
         somp_loginfo(SDL_LOG_CATEGORY_APPLICATION, "Unknown mode, switching to NORMAL\n");
         state->mode = NORMAL;

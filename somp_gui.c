@@ -1,192 +1,171 @@
-/*
-* Filename:	main.c
-* Date:		03/06/2025
-* Name:		EL Joubert
-*
-* Somp GUI
-* The a frontend for the somp_logic code
-* Styling for now is inspired by:
-* R.C. Hibbeler's "Mechanics of Materials 10th ed."
-*/
-
-#define TODO(msg) printf("[%s, %d] TODO: "msg"\n",__FILE__, __LINE__);
-
-#include <stdio.h>
-#include <stdlib.h>
 #include <stdbool.h>
+#include <stdlib.h>
+
 #include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
 
 #define SOMP_LOGIC_IMPLEMENTATION
 #include "somp_logic.h"
 
-typedef enum {
-    NORMAL,
-    ADD_POINT_FORCE,
-    ADD_DISTRIBUTED,
-    MOD_POINT_FORCE,
-    MOD_DISTRIBUTED_START,
-    MOD_DISTRIBUTED_END  ,
-} Mode;
+#define UTIlS_IMPLEMENTATION
+#include "utils.h"
 
-typedef struct {
-    int r, g, b, a;
-
-    int unit;
-} ObjectRender;
-
-typedef struct {
-    ObjectRender * items;
-    int count;
-    int capacity;
-} ObjectRenders;
-
-typedef struct {
-    Beam beam;
-    PointForces point_forces;
-    DistributedForces distrib_forces;
-    Mode mode;
-
-    ObjectRenders point_renders;
-    ObjectRenders distrib_renders;
-
-    // For previewing the distributed load to be added
-    bool distributed_first_placed;
-    // keeps start and end points of distributed preview
-    SDL_FRect distrib_prev_se;
-
-    // Pointers to keep track of the current point or distributed force being
-    // modified
-    union {
-        PointForce * mod_point;
-        DistributedForce * mod_distrib;
-    };
-} somp_section_solve_t;
-
-typedef struct {
-    TTF_Font * liberation_serif_regl12;
-    TTF_Font * liberation_serif_regl24;
-    TTF_Font * liberation_serif_regl48;
-} SompFonts;
-
-typedef struct {
-    SDL_Window * window;
-    SDL_Renderer * renderer;
-    TTF_TextEngine * text_engine;
-    SompFonts fonts;
-    TTF_Font * font;
-    struct {
-        somp_section_solve_t solve;
-    } section;
-} SompState;
-
-SompState * somp_state;
-int sdl_window_width, sdl_window_height;
-
-void somp_init(void * state, SDL_Window * w, SDL_Renderer * r, TTF_TextEngine * t)
-{
-// IMPORTANT: This will only work on my machine, find a way to get this font or default font on machine
-// TODO
-#define LIBERATION_SERIF_FILE "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf"
-#define FONT_SIZE 48
-    if (state) somp_state = (SompState *) state;
-    else somp_state = malloc(sizeof(SompState));
-
-    somp_state->window      = w;
-    somp_state->renderer    = r;
-    somp_state->text_engine = t;
-    somp_state->section.solve.distributed_first_placed = false;
-
-    Beam * b = &somp_state->section.solve.beam;
-    PointForces * pfs = &somp_state->section.solve.point_forces;
-    DistributedForces * dfs = &somp_state->section.solve.distrib_forces;
-
-    b->length = 1.0;
-    b->sections_count = MAX_SECTIONS;
-
-    *pfs = (PointForces){0};
-    *dfs = (DistributedForces){0};
-
-    ObjectRenders * pfr = &somp_state->section.solve.point_renders;
-    ObjectRenders * dfr = &somp_state->section.solve.distrib_renders;
-
-    *pfr = (ObjectRenders){0};
-    *dfr = (ObjectRenders){0};
-
-
-    somp_state->fonts.liberation_serif_regl12 = TTF_OpenFont(LIBERATION_SERIF_FILE, 12);
-    somp_state->fonts.liberation_serif_regl24 = TTF_OpenFont(LIBERATION_SERIF_FILE, 24);
-    somp_state->fonts.liberation_serif_regl48 = TTF_OpenFont(LIBERATION_SERIF_FILE, 48);
-
-    somp_state->font = somp_state->fonts.liberation_serif_regl48;
-}
-
-void somp_reload(void * state)
-{
-    if (state) somp_state = (SompState *) state;
-    else {
-        SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Expected state to not be NULL. Run somp_init before this function\n");
-        return;
-    }
-
-    SDL_GetWindowSize(somp_state->window, &sdl_window_width, &sdl_window_height);
-    printf("SOMP: Hot Reload\n");
-};
-
-void * somp_close()
-{
-    //TTF_CloseFont(somp_state->font);
-    return somp_state;
-};
-
-
-#define EJSDL_ARROWH_L 10
-#define EJSDL_ARROWH_W 5
-
-void ejsdl_render_arrow_vert(SDL_Renderer * sdl_renderer,
-        float x, float y1, float y2)
-{
-    float arrow_head_length = (y2 < y1) ? -EJSDL_ARROWH_L : EJSDL_ARROWH_L;
-
-    SDL_RenderLine(sdl_renderer, x, y1, x, y2);
-    SDL_RenderLine(sdl_renderer, x + EJSDL_ARROWH_W, y2 - arrow_head_length, x, y2);
-    SDL_RenderLine(sdl_renderer, x - EJSDL_ARROWH_W, y2 - arrow_head_length, x, y2);
-}
-
-float somp_distrib_line_y(
-        float x,
-        SDL_FRect x_axis,
-        float max_value,
-        float polynomial[]
-        )
-{
-        float bx = lerp(0, max_value, (x-x_axis.x)/x_axis.w);
-        float y = x_axis.y - evalPolynomial(bx, polynomial);
-        return y;
-};
-
-SDL_Rect ejsdl_center_rect(int x, int y, int w, int h)
-{
-    return (SDL_Rect) { .x = x - w/2, .y = y - h/2, .w = w, .h = h, };
-}
-SDL_FRect ejsdl_center_frect(float x, float y, float w, float h)
-{
-    return (SDL_FRect) { .x = x - w/2, .y = y - h/2, .w = w, .h = h, };
-}
-
-bool mouse_pressed = false;
-bool mouse_released = false;
+#define somp_loginfo(cat, msg) SDL_LogInfo((cat), (msg))
 
 #define COLOR_DEFAULT         COLOR_BLACK
+#define COLOR_PREVIEW         COLOR_GRAY
+#define COLOR_HIGHLIGHT       COLOR_RED
 #define COLOR_RED             255,   0,   0, 255
 #define COLOR_BLACK             0,   0,   0, 255
 #define COLOR_GRAY            100, 100, 100, 255
 #define COLOR_HIBB_BACKGROUND 255, 252, 233, 255
 #define COLOR_HIBB_BEAM        79, 167, 195, 255
-
 #define EJSDL_COLOR(color) (SDL_Color){ color }
+#define EXPAND_COLOR(color) (color).r, (color).g, (color).b, (color).a
 
-void ejsdl_render_text(SDL_Renderer * sdl_renderer, const char * text, float x, float y, SDL_Color color)
+typedef SDL_FRect             SompBoundary;
+typedef Beam                  SompBeam;
+typedef PointForces           SompPointForces;
+typedef DistributedForces     SompDistrForces;
+typedef PointForce            SompPointForce;
+typedef DistributedForce      SompDistrForce;
+
+typedef struct {
+    int windoww;
+    int windowh;
+
+    // Mouse
+    float mouse_x;
+    float mouse_y;
+    bool mouse_pressed;
+    bool mouse_released;
+    bool mouse_down;
+    SDL_MouseButtonFlags mouse_state;
+} SompGui;
+
+typedef enum {
+    NORMAL,
+    ADD_POINT_FORCE,
+    ADD_DISTRIB_FORCE,
+    MOD_POINT_FORCE,
+    MOD_DISTR_FORCE,
+    MOD_DISTR_FORCE_START,
+    MOD_DISTR_FORCE_END,
+} SolveMode;
+
+typedef struct {
+    SompBeam beam;
+    SompPointForces point_forces;
+    SompDistrForces distr_forces;
+
+    union {
+        SompPointForce * mod_point_force;
+        SompDistrForce * mod_distr_force;
+    };
+    bool distributed_first_placed;
+
+    // TODO: magic number
+    // Also this is just a TERRIBLE idea, we should look into a temporary
+    // allocator instead
+    float temp_floats[10];
+
+    SolveMode mode;
+} somp_section_solve_t;
+
+typedef struct {
+    SDL_Window * window;
+    SDL_Renderer * renderer;
+    TTF_Font * font;
+
+    somp_section_solve_t solve;
+} SompState;
+
+
+SompState * somp_state;
+SompGui gui = {0};
+
+void gui_init(SompGui * const gui);
+
+// ==================== HOT RELOAD FUNCS ================================
+//bool somp_init(void * state, SDL_Window * window, SDL_Renderer * renderer, TTF_TextEngine * text_engine)
+bool somp_init(void * state, SDL_Window * window, SDL_Renderer * renderer,...)
+{
+    if (!state) somp_state = malloc(sizeof(SompState));
+    else somp_state = state;
+
+    somp_state->window = window;
+    somp_state->renderer = renderer;
+    //somp_state->text_engine = text_engine;
+
+#define LIBERATION_SERIF_FILE "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf"
+    somp_state->font = TTF_OpenFont(LIBERATION_SERIF_FILE, 48);
+    somp_state->solve.beam.length = 1.0;
+    somp_state->solve.beam.sections_count = MAX_SECTIONS;
+    gui_init(&gui);
+
+    return true;
+};
+bool somp_reload(void * state)
+{
+    if (!state)
+    {
+        SDL_LogError(SDL_LOG_CATEGORY_ERROR, "Received invalid state. Run somp_init before reload\n");
+        return false;
+    } else somp_state = state;
+
+    somp_loginfo(SDL_LOG_CATEGORY_APPLICATION, "Hot Reload\n");
+    gui_init(&gui);
+
+    return true;
+};
+SompState * somp_close()
+{
+    return somp_state;
+};
+// ======================================================================
+// ====================== SOLVE SECTION =================================
+void mod_distr_force_enter(const SompBoundary beam_bound, const SompBeam beam, SompDistrForce * distr_force);
+
+#define swap(x,y,type) do { type t = (x); x = y; y = t; } while(0)
+float px_to_force(float y, SompBoundary bound)
+{
+    // For now we assume that the beam or axis we care about is exaclty in the middle of the boundary
+    // We use the y component and map it linearly, modify this later
+    // Also assuming 1px = 1N
+
+    //f = Y+H/2 - y
+    return bound.y+bound.h/2 - y;
+};
+bool hover(const SompBoundary bound)
+{
+    SDL_FPoint mouse = { gui.mouse_x, gui.mouse_y };
+    //SDL_RenderRect(somp_state->renderer, &bound);
+    return SDL_PointInRectFloat(&mouse, &bound);
+}
+float force_to_px(float force, SompBoundary bound)
+{
+    // This should be the inverse of px_to_force;
+
+    // f = Y+H/2 - y
+    // y = Y+H/2 - f
+    return bound.y+bound.h/2 - force;
+};
+void clear_background(SompBoundary boundary, SDL_Color color)
+{
+    SDL_SetRenderDrawColorFloat(somp_state->renderer, color.r, color.g, color.b, color.a);
+    SDL_RenderFillRect(somp_state->renderer, &boundary);
+};
+void render_arrow_vert(SDL_Renderer * sdl_renderer,
+        float x, float y1, float y2, float head_width)
+{
+    float arrow_head_length = (y2 < y1) ? -head_width : head_width;
+
+    SDL_RenderLine(sdl_renderer, x, y1, x, y2);
+    SDL_RenderLine(sdl_renderer, x + head_width, y2 - arrow_head_length, x, y2);
+    SDL_RenderLine(sdl_renderer, x - head_width, y2 - arrow_head_length, x, y2);
+}
+void text(SDL_Renderer * sdl_renderer, const char * text, float x, float y,
+        SDL_Color color)
 {
     SDL_Surface * surface = TTF_RenderText_Solid(somp_state->font, text, 0, color);
     SDL_Texture * texture = SDL_CreateTextureFromSurface(sdl_renderer, surface);
@@ -197,481 +176,531 @@ void ejsdl_render_text(SDL_Renderer * sdl_renderer, const char * text, float x, 
     SDL_DestroySurface(surface);
     SDL_DestroyTexture(texture);
 };
-void ejsdl_render_text_centered(SDL_Renderer * sdl_renderer, const char * text, float x, float y, SDL_Color color)
+void render_beam(SompBoundary beam_bound)
 {
-    SDL_Surface * surface = TTF_RenderText_Solid(somp_state->font, text, 0, color);
-    SDL_Texture * texture = SDL_CreateTextureFromSurface(sdl_renderer, surface);
+    SDL_FRect beam_rect = { beam_bound.x, beam_bound.y + 0.5*beam_bound.h, beam_bound.w, 10 };
+    SDL_SetRenderDrawColor(somp_state->renderer, COLOR_HIBB_BEAM);
+    SDL_RenderFillRect(somp_state->renderer, &beam_rect);
+    SDL_SetRenderDrawColor(somp_state->renderer, COLOR_BLACK);
+    SDL_RenderRect(somp_state->renderer, &beam_rect);
 
-    const SDL_FRect dstrect = { x-texture->w/2, y-texture->h/2, texture->w, texture->h };
-
-    SDL_RenderTexture(sdl_renderer, texture, NULL, &dstrect);
-    SDL_DestroySurface(surface);
-    SDL_DestroyTexture(texture);
+    SDL_SetRenderDrawColor(somp_state->renderer, COLOR_BLACK);
+    SDL_RenderLine(somp_state->renderer, beam_bound.x, beam_bound.y, beam_rect.x, beam_bound.y+beam_bound.h);
 };
-void ejsdl_render_text_sized(SDL_Renderer * sdl_renderer, const char * text, SDL_FRect dstrect, SDL_Color color)
+void render_point_force(SompBoundary beam_bound, SompBeam beam, SompPointForce * pf, SDL_Color color)
 {
-    SDL_Surface * surface = TTF_RenderText_Solid(somp_state->font, text, 0, color);
-    SDL_Texture * texture = SDL_CreateTextureFromSurface(sdl_renderer, surface);
+    somp_section_solve_t * const S = &somp_state->solve;
+    // TODO: magic numbers
+    const int hl_distance = 4;
+    // Assumptions in this function
+    //  1. Beam rendered in centre of beam_bound
+    //  2. Beam width = 10
+    //  3. Arrow head width is same everywhere
+    int arrow_x  = lerp(beam_bound.x, beam_bound.x+beam_bound.w, invlerp(0, beam.length, pf->distance)); // 1.
+    int arrow_ys = (pf->force > 0) ? beam_bound.y : beam_bound.y+beam_bound.h; // 1.
+    int arrow_ye = beam_bound.y + beam_bound.h/2 + ((pf->force > 0) ? 0 : 10);   // 2.
 
-    SDL_RenderTexture(sdl_renderer, texture, NULL, &dstrect);
-    SDL_DestroySurface(surface);
-    SDL_DestroyTexture(texture);
-};
-void ejsdl_render_text_sized_auto(SDL_Renderer * sdl_renderer, const char * text, SDL_FRect dstrect, SDL_Color color)
-{
-    SDL_Surface * surface = TTF_RenderText_Solid(somp_state->font, text, 0, color);
-    SDL_Texture * texture = SDL_CreateTextureFromSurface(sdl_renderer, surface);
+    char buf[32];
+    snprintf(buf, 32, "%.1f", pf->force);
+    TTF_SetFontSize(somp_state->font, 14);
+    text(somp_state->renderer, buf, arrow_x, arrow_ys, EJSDL_COLOR(COLOR_BLACK));
 
-    if (nearly_equal(dstrect.w, 0)) dstrect.w = texture->w;
-    if (nearly_equal(dstrect.h, 0)) dstrect.h = texture->h;
-
-    SDL_RenderTexture(sdl_renderer, texture, NULL, &dstrect);
-    SDL_DestroySurface(surface);
-    SDL_DestroyTexture(texture);
-};
-
-void somp_solve_normal(SDL_Renderer * sdl_renderer, SDL_FRect beam_rect)
-{
-#define HIGHLIGHT_DISTANCE 5
-    const bool * keyboard_state = SDL_GetKeyboardState(NULL);
-    somp_section_solve_t * S = &somp_state->section.solve;
-    float mouse_x, mouse_y;
-    int mouse_button = SDL_GetMouseState(&mouse_x, &mouse_y);
-
-    SDL_SetRenderDrawColor(sdl_renderer, COLOR_RED);
-    for (int i = 0; i < S->point_forces.count; i++)
-    {
-        PointForce pf = S->point_forces.items[i];
-        float fx = lerp(beam_rect.x, beam_rect.x+beam_rect.w, pf.distance/S->beam.length);
-        if (fabs(fx - mouse_x) < HIGHLIGHT_DISTANCE)
-        {
-            ejsdl_render_arrow_vert(sdl_renderer, fx, 0.1*sdl_window_height, beam_rect.y);
-            if (mouse_button & SDL_BUTTON_LEFT && mouse_pressed)
-            {
-                S->mode = MOD_POINT_FORCE;
-                S->mod_point = &S->point_forces.items[i];
-            } else if (keyboard_state[SDL_SCANCODE_X])
-            {
-                shift_array(S->point_forces.items, i, S->point_forces.count)
-                shift_array(S->point_renders.items, i, S->point_forces.count)
-                S->point_forces.count--;
-                S->point_renders.count--;
-                return;
-            };
-        };
+    SDL_FRect hover_rect = {
+        arrow_x - hl_distance,
+        minf(arrow_ys, arrow_ye),
+        hl_distance*2,
+        abs(arrow_ye - arrow_ys)
     };
-
-    for (int i = 0; i < S->distrib_forces.count; i++)
+    if (hover(hover_rect))
     {
-        // Render distributed force
-        DistributedForce df = S->distrib_forces.items[i];
-        int x_start = lerp(beam_rect.x, beam_rect.x+beam_rect.w, df.start/S->beam.length);
-        int x_end   = lerp(beam_rect.x, beam_rect.x+beam_rect.w, df.end  /S->beam.length);
-
-        if (fabs(x_start - mouse_x) < HIGHLIGHT_DISTANCE)
+        SDL_SetRenderDrawColor(somp_state->renderer, COLOR_HIGHLIGHT);
+        if (gui.mouse_pressed && gui.mouse_state == SDL_BUTTON_LEFT && S->mode == NORMAL)
         {
-            float y = somp_distrib_line_y(x_start, beam_rect, S->beam.length, df.polynomial);
-            SDL_RenderLine(sdl_renderer, x_start, y, x_start, beam_rect.y);
-            if (mouse_button & SDL_BUTTON_LEFT && mouse_pressed)
-            {
-                S->mode = MOD_DISTRIBUTED_START;
-                S->mod_distrib = &S->distrib_forces.items[i];
-            }else if (keyboard_state[SDL_SCANCODE_X])
-            {
-                // shift elements after this up by one
-                shift_array(S->distrib_forces.items, i, S->distrib_forces.count)
-                shift_array(S->distrib_renders.items, i, S->distrib_forces.count)
-                // decrease count by one
-                S->distrib_forces.count--;
-                S->distrib_renders.count--;
-            };
-
-        } else if (fabs(x_end - mouse_x) < HIGHLIGHT_DISTANCE)
-        {
-            float y = somp_distrib_line_y(x_end, beam_rect, S->beam.length, df.polynomial);
-            SDL_RenderLine(sdl_renderer, x_end, y, x_end, beam_rect.y);
-            if (mouse_button & SDL_BUTTON_LEFT && mouse_pressed)
-            {
-                S->mode = MOD_DISTRIBUTED_END;
-                S->mod_distrib = &S->distrib_forces.items[i];
-            }else if (keyboard_state[SDL_SCANCODE_X])
-            {
-                // shift elements after this up by one
-                shift_array(S->distrib_forces.items, i, S->distrib_forces.count)
-                // decrease count by one
-                S->distrib_forces.count--;
-            };
-
+            S->mode = MOD_POINT_FORCE;
+            S->mod_point_force = pf;
         }
+    } else
+    {
+        SDL_SetRenderDrawColor(somp_state->renderer, color.r, color.g, color.b, color.a);
+    }
+
+    // Always highlighted when modifying
+    if (S->mode == MOD_POINT_FORCE && nearly_equal(pf->distance, S->mod_point_force->distance))
+    {
+        SDL_SetRenderDrawColor(somp_state->renderer, COLOR_HIGHLIGHT);
+    }
+    render_arrow_vert(somp_state->renderer, arrow_x, arrow_ys, arrow_ye, 5); // 3.
+};
+
+void render_point_forces(const SompBoundary beam_bound, const SompBeam beam, const SompPointForces * point_forces)
+{
+    for (int i = 0; i < point_forces->count; i++)
+    {
+        render_point_force(beam_bound, beam, &point_forces->items[i], EJSDL_COLOR(COLOR_DEFAULT));
     };
-    SDL_SetRenderDrawColor(sdl_renderer, COLOR_DEFAULT);
 }
-
-// Main loop, returns false to exit application
-bool somp_main()
+// TODO: I want polynomial parameter to be const but evalPolynomial takes a
+// mutable array, this should be changed
+// Returns absolute pixel values of the heights that the distributed lines should be drawns
+// Has some magic numbers
+void get_distr_line_heights(float * const ys, float * const ye, const SompBoundary beam_bound, float polynomial[], const float dist)
 {
-    SDL_Window     * sdl_window      = somp_state->window;
-    SDL_Renderer   * sdl_renderer    = somp_state->renderer;
-    SDL_Event sdl_event;
-    while (SDL_PollEvent(&sdl_event))
+    // TODO: magic numbers
+    // Assumptions in this function
+    //  1. Beam rendered in centre of beam_bound
+    //  2. Beam width = 10
+    float px_offset = force_to_px(evalPolynomial(dist, polynomial), beam_bound);
+    int line_ys = px_offset; // 1.
+    int line_ye;
+    if (px_offset < beam_bound.y + beam_bound.h/2) line_ye = beam_bound.y + beam_bound.h/2; // 1 2.
+    else if (px_offset < beam_bound.y + beam_bound.h/2 + 10) line_ye = line_ys;
+    else line_ye = beam_bound.y + beam_bound.h/2 + 10; // 1 2.
+
+    if (ys != NULL) *ys = line_ys;
+    if (ye != NULL) *ye = line_ye;
+};
+void render_phony_distr_force(SompBoundary beam_bound,
+        float xs, float ys, float xe, float ye,
+        SDL_Color color)
+{
+    // TODO: magic number
+    const int distr_preview_step = 16;
+
+
+    float temp_poly[MAX_POLYNOMIAL_DEGREE] = {0};
+    line_from_points(&temp_poly[1], &temp_poly[0], xs, ys, xe, ye);
+
+    SDL_SetRenderDrawColor(somp_state->renderer, color.r, color.g, color.b, color.a);
+
+    float line_ys, line_ye;
+    get_distr_line_heights(&line_ys, &line_ye, beam_bound, temp_poly, xs);
+    SDL_RenderLine(somp_state->renderer, xs, line_ys, xs, line_ye);
+
+    float xp = xs, yp = line_ys;
+
+    xs += distr_preview_step - ((int)xs % distr_preview_step);
+    for (int x = xs; x <= xe; x += distr_preview_step)
     {
-        switch (sdl_event.type) {
-            case SDL_EVENT_QUIT: return false;
-            case SDL_EVENT_WINDOW_SHOWN:
-            case SDL_EVENT_WINDOW_RESIZED:
-                 SDL_GetWindowSize(sdl_window, &sdl_window_width, &sdl_window_height);
-                 break;
-            case SDL_EVENT_MOUSE_BUTTON_UP:
-                mouse_released = true;
-                break;
-            case SDL_EVENT_MOUSE_BUTTON_DOWN:
-                mouse_pressed = true;
-                break;
-            case SDL_EVENT_KEY_DOWN:
-                 switch (sdl_event.key.key) {
-                 case SDLK_S: {
-                     somp_section_solve_t * s = &somp_state->section.solve;
-                     solveBeam(&s->beam,
-                             s->point_forces.items, s->point_forces.count,
-                             s->distrib_forces.items, s->distrib_forces.count);
-                    printf("Beam: {\n");
-                    printf("\t.length = %f\n", s->beam.length);
-                    printf("\t.sections_count = %d\n", s->beam.sections_count);
-                    printf("Raw: ");
-                    printStructArray(s->beam.raws, s->beam.sections_count, sizeof(Section), printSection);
-                    printf("shear: ");
-                    printStructArray(s->beam.shears, s->beam.sections_count, sizeof(Section), printSection);
-                    printf("moment: ");
-                    printStructArray(s->beam.moments, s->beam.sections_count, sizeof(Section), printSection);
-                    printf("}\n");
-                 }; break;
-                 case SDLK_F: {
-                     somp_section_solve_t * s = &somp_state->section.solve;
-                     s->mode = (s->mode == ADD_POINT_FORCE) ? NORMAL : ADD_POINT_FORCE;
-                 }; break;
-                 case SDLK_D: {
-                     somp_section_solve_t * s = &somp_state->section.solve;
-                     s->mode = (s->mode == ADD_DISTRIBUTED) ? NORMAL : ADD_DISTRIBUTED;
-                     s->distributed_first_placed = false;
-                 }; break;
-                 case SDLK_R: {
-                     somp_section_solve_t * s = &somp_state->section.solve;
-                     s->point_forces.count = 0;
-                     s->distrib_forces.count = 0;
-                 }; break;
-                 }
+
+        get_distr_line_heights(&line_ys, &line_ye, beam_bound, temp_poly, x);
+        SDL_RenderLine(somp_state->renderer, x, line_ys, x, line_ye);
+        SDL_RenderLine(somp_state->renderer, x, line_ys, xp, yp);
+
+        xp = x;
+        yp = line_ys;
+    }
+
+    get_distr_line_heights(&line_ys, &line_ye, beam_bound, temp_poly, xe);
+    SDL_RenderLine(somp_state->renderer, xe, line_ys, xp, yp);
+    SDL_RenderLine(somp_state->renderer, xe, line_ys, xe, line_ye);
+}
+void distr_side(SDL_FRect hover_rect,
+        const SompBoundary beam_bound, const SompBeam beam, SompDistrForce * df,
+        SDL_Color default_color, SDL_Color hl_color)
+{
+    SDL_Color * color = &default_color;
+    if (hover(hover_rect)) {
+        color = &hl_color;
+        if (gui.mouse_pressed && gui.mouse_state == SDL_BUTTON_LEFT && somp_state->solve.mode == NORMAL) {
+            mod_distr_force_enter(beam_bound, beam, df);
         }
     }
-    // ========================= SOLVE SECTION START ========================
-    somp_section_solve_t * state = &somp_state->section.solve;
-    SDL_SetRenderDrawColor(sdl_renderer, COLOR_HIBB_BACKGROUND);
-    SDL_RenderClear(sdl_renderer);
+    else color = &default_color;
+    SDL_SetRenderDrawColor(somp_state->renderer, EXPAND_COLOR(*color));
 
-    TTF_SetFontSize(somp_state->font, 72);
-    ejsdl_render_text (sdl_renderer, "SOMP", sdl_window_width/2, 10, EJSDL_COLOR(COLOR_BLACK));
+}
+void render_distr_force(const SompBoundary beam_bound, const SompBeam beam, SompDistrForce * df, SDL_Color color)
+{
+    // TODO: magic number
+    const int distr_preview_step = 16;
+    const int hl_dist_x = 4;
+    //const int hl_dist_y = 4;
 
-    TTF_SetFontSize(somp_state->font, sdl_window_height*0.1);
-    ejsdl_render_text(sdl_renderer, "Hello", sdl_window_width/2, 100, EJSDL_COLOR(COLOR_RED));
+    int x_start = lerp(beam_bound.x, beam_bound.x+beam_bound.w, invlerp(0, beam.length, df->start));
+    int x_end   = lerp(beam_bound.x, beam_bound.x+beam_bound.w, invlerp(0, beam.length, df->end  ));
 
-    // Render beam and wall
-    SDL_FRect beam_rect = { 0.1*sdl_window_width, 0.5*sdl_window_height, 0.5*sdl_window_width, 10 };
-    SDL_SetRenderDrawColor(sdl_renderer, COLOR_HIBB_BEAM);
-    SDL_RenderFillRect(sdl_renderer, &beam_rect);
-    SDL_SetRenderDrawColor(sdl_renderer, COLOR_BLACK);
-    SDL_RenderRect(sdl_renderer, &beam_rect);
+    float line_ys, line_ye;
+    get_distr_line_heights(&line_ys, &line_ye, beam_bound, df->polynomial, df->start);
 
-    SDL_SetRenderDrawColor(sdl_renderer, COLOR_BLACK);
-    SDL_RenderLine(sdl_renderer, beam_rect.x, 0.1*sdl_window_height, beam_rect.x, 0.9*sdl_window_height);
+    // Start
+    SompBoundary hover_rect;
+    hover_rect = (SompBoundary){
+        x_start-hl_dist_x,
+        minf(line_ys, line_ye),
+        hl_dist_x*2,
+        fabsf(line_ye-line_ys)
+    };
+    distr_side(hover_rect, beam_bound, beam, df, color, EJSDL_COLOR(COLOR_HIGHLIGHT));
+    SDL_RenderLine(somp_state->renderer, x_start, line_ys, x_start, line_ye);
 
-    //TODO: extract drawing things to their own functions
-#define POINT_FORCE_ARROW_START (0.1*sdl_window_height)
-    // Render point forces
-    char force_text[32];
-    const int forces_font_size = 16;
-    TTF_SetFontSize(somp_state->font, forces_font_size);
-    for (int i = 0; i < state->point_forces.count; i++)
+    SDL_SetRenderDrawColor(somp_state->renderer, color.r, color.g, color.b, color.a);
+
+    float xp = x_start, yp = line_ys;
+
+    x_start += distr_preview_step - (x_start % distr_preview_step);
+    for (int x = x_start; x <= x_end; x += distr_preview_step)
     {
-        PointForce pf = state->point_forces.items[i];
-        ObjectRender pr = state->point_renders.items[i];
+        float dist = lerp(0, beam.length, invlerp(beam_bound.x, beam_bound.x+beam_bound.w, x));
+        get_distr_line_heights(&line_ys, &line_ye, beam_bound, df->polynomial, dist);
+        SDL_RenderLine(somp_state->renderer, x, line_ys, xp, yp);
+        SDL_RenderLine(somp_state->renderer,
+                x, line_ys,
+                x, line_ye);
 
-        int x = beam_rect.x + (pf.distance/state->beam.length)*(beam_rect.w);
-        ejsdl_render_arrow_vert(sdl_renderer, x, POINT_FORCE_ARROW_START, beam_rect.y);
-
-        const char * unit = (pr.unit == 1) ? "N" : "kN";
-        snprintf(force_text, ArrayCount(force_text), "%.1f %s", pf.force, unit);
-
-        ejsdl_render_text_centered(sdl_renderer, force_text, x, POINT_FORCE_ARROW_START - forces_font_size, EJSDL_COLOR(COLOR_DEFAULT));
-    }
-    SDL_SetRenderDrawColor(sdl_renderer, COLOR_DEFAULT);
-
-    // Render distiributed forces
-#define DISTRIB_VIEW_STEP 18
-    for (int i = 0; i < state->distrib_forces.count; i++)
-    {
-        // Render distributed force
-        DistributedForce df = state->distrib_forces.items[i];
-        int x_start = lerp(beam_rect.x, beam_rect.x+beam_rect.w, df.start/state->beam.length);
-        int x_end   = lerp(beam_rect.x, beam_rect.x+beam_rect.w, df.end  /state->beam.length);
-
-        float y = somp_distrib_line_y(x_start, beam_rect, state->beam.length, df.polynomial);
-
-        SDL_RenderLine(sdl_renderer, x_start, y, x_start, beam_rect.y);
-
-        int xp = x_start;
-        float yp = y;
-        // Align all lines (I think its neater)
-        x_start +=  DISTRIB_VIEW_STEP - x_start % DISTRIB_VIEW_STEP;
-        for (int x = x_start; x <= x_end; x += DISTRIB_VIEW_STEP)
-        {
-            y = somp_distrib_line_y(x, beam_rect, state->beam.length, df.polynomial);
-            // Line to beam
-            SDL_RenderLine(sdl_renderer, x, y, x, beam_rect.y);
-            // Line from previous
-            SDL_RenderLine(sdl_renderer, xp, yp, x, y);
-
-            xp = x;
-            yp = y;
-        };
-        y = somp_distrib_line_y(x_end, beam_rect, state->beam.length, df.polynomial);
-        // Line to beam
-        SDL_RenderLine(sdl_renderer, x_end, y, x_end, beam_rect.y);
-        // Line from previous
-        SDL_RenderLine(sdl_renderer, xp, yp, x_end, y);
+        xp = x;
+        yp = line_ys;
     }
 
-    switch (state->mode) {
-    case NORMAL: {
-        somp_solve_normal(sdl_renderer, beam_rect);
-    }; break;
-    case ADD_POINT_FORCE: {
-        float mouse_x, mouse_y;
-        int mouse_button = SDL_GetMouseState(&mouse_x, &mouse_y);
+    get_distr_line_heights(&line_ys, &line_ye, beam_bound, df->polynomial, df->end);
+    SDL_RenderLine(somp_state->renderer, x_end, line_ys, xp, yp);
 
-        SDL_SetRenderDrawColor(sdl_renderer, COLOR_GRAY);
-        int x = MAX(beam_rect.x, MIN(mouse_x, beam_rect.x + beam_rect.w));
-        ejsdl_render_arrow_vert(sdl_renderer, x, POINT_FORCE_ARROW_START, beam_rect.y);
+    // End
+    hover_rect = (SompBoundary){
+        x_end-hl_dist_x,
+        minf(line_ys, line_ye),
+        hl_dist_x*2,
+        fabsf(line_ye-line_ys)
+    };
+    distr_side(hover_rect, beam_bound, beam, df, color, EJSDL_COLOR(COLOR_HIGHLIGHT));
+    SDL_RenderLine(somp_state->renderer, x_end, line_ys, x_end, line_ye);
 
-        // TODO: figure out unit system
-        // TODO: extract out all the constants
-        // TODO: decide on a function to determine the new force
-        char force_text[32];
-        const char * new_unit = "N"; // Should be whatever the user set it to (N or kN or MN)
-        const float new_force = 0.1*pow(beam_rect.y - mouse_y, 2);
-        snprintf(force_text, ArrayCount(force_text), "%.1f %s", new_force, new_unit);
+}
+void render_distr_forces(const SompBoundary beam_bound, const SompBeam beam, const SompDistrForces * distr_forces)
+{
+    for (int i = 0; i < distr_forces->count; i++)
+    {
+        render_distr_force(beam_bound, beam, &distr_forces->items[i], EJSDL_COLOR(COLOR_DEFAULT));
+    };
+}
+bool normal(SompBoundary beam_bound, const SompPointForces * point_forces, const SompDistrForces * distr_forces) 
+{
+    (void)beam_bound;
+    (void)point_forces;
+    (void)distr_forces;
 
-        const int forces_font_size = 16;
-        TTF_SetFontSize(somp_state->font, forces_font_size);
-        ejsdl_render_text_centered(sdl_renderer, force_text, x, POINT_FORCE_ARROW_START - forces_font_size, EJSDL_COLOR(COLOR_DEFAULT));
+    return true;
+}
+bool add_point_force(SompBoundary beam_bound, const SompBeam beam, SompPointForces * point_forces)
+{
+    SompPointForce new_force = {0};
 
-        if (mouse_button & SDL_BUTTON_LEFT && mouse_pressed)
+    float new_force_x = MIN(beam_bound.x+beam_bound.w, MAX(beam_bound.x, gui.mouse_x));
+    float new_force_y = gui.mouse_y;
+
+    new_force.force    = px_to_force(new_force_y, beam_bound);
+    new_force.distance = lerp(0, beam.length, invlerp(beam_bound.x, beam_bound.x+beam_bound.w, new_force_x));
+
+
+    render_point_force(beam_bound, beam, &new_force, EJSDL_COLOR(COLOR_PREVIEW));
+
+    if (gui.mouse_pressed && gui.mouse_state == SDL_BUTTON_LEFT)
+    {
+        somp_loginfo(SDL_LOG_CATEGORY_APPLICATION, "Point force added\n");
+        DynamicArrayAppend(point_forces, new_force);
+    };
+
+
+    return true;
+}
+bool add_distr_force(SompBoundary beam_bound, SompBeam beam, SompDistrForces * distr_forces)
+{
+    somp_section_solve_t * S = &somp_state->solve;
+    // TODO: magic number
+    const float preview_width = beam_bound.w*0.2;
+
+    float * xs, * ys;
+    float * xe, * ye;
+
+    xs = &S->temp_floats[0];
+    xe = &S->temp_floats[1];
+    ys = &S->temp_floats[2];
+    ye = &S->temp_floats[3];
+
+    if (!S->distributed_first_placed)
+    {
+        *xs = minf(beam_bound.x+beam_bound.w, maxf(beam_bound.x, gui.mouse_x));
+        *xe = minf(beam_bound.x+beam_bound.w, maxf(beam_bound.x, gui.mouse_x)+preview_width);
+
+        *ys = beam_bound.y + beam_bound.h/2 - gui.mouse_y;
+        *ye = beam_bound.y + beam_bound.h/2 - gui.mouse_y;
+
+        if (gui.mouse_pressed && gui.mouse_state == SDL_BUTTON_LEFT)
         {
-            float d = ((x-beam_rect.x)/beam_rect.w)*state->beam.length;
-            PointForce p = { .distance=d, .force=new_force };
-            ObjectRender r = { COLOR_DEFAULT, 1 };
-            DynamicArrayAppend(&state->point_forces, p);
-            DynamicArrayAppend(&state->point_renders, r);
-            printf("Adding pointforce\n");
+            S->distributed_first_placed = true;
         }
-    }; break;
-    case ADD_DISTRIBUTED: {
-#define DISTRIB_PREVIEW_LOOKAHEAD (beam_rect.w/10)
-#define DISTRIB_PREVIEW_HEIGHT 5
-        float mouse_x, mouse_y;
-        int mouse_button = SDL_GetMouseState(&mouse_x, &mouse_y);
-        float * dx_start = &state->distrib_prev_se.x;
-        float * dx_end = &state->distrib_prev_se.y;
-        float * dy_start = &state->distrib_prev_se.w;
-        float * dy_end = &state->distrib_prev_se.h;
+    } else
+    {
+        *xe = MIN(beam_bound.x+beam_bound.w, MAX(beam_bound.x, gui.mouse_x));
+        *ye = beam_bound.y + beam_bound.h/2 - gui.mouse_y;
 
-        // Distributed distances and heights, in pixels
-
-        if (!state->distributed_first_placed)
+        if (*xs > *xe)
         {
-            SDL_SetRenderDrawColor(sdl_renderer, COLOR_GRAY);
-            int x_start = MAX(beam_rect.x, MIN(mouse_x, beam_rect.x + beam_rect.w));
-            int x_end   = MIN(beam_rect.x + beam_rect.w, mouse_x + DISTRIB_PREVIEW_LOOKAHEAD);
-            for (int x = x_start; x <= x_end; x += DISTRIB_VIEW_STEP)
-            {
-                int y = mouse_y;
-                SDL_RenderLine(sdl_renderer, x, y, x, beam_rect.y);
+            swap(xs, xe, float *);
+            swap(ys, ye, float *);
+        }
+
+        if (gui.mouse_released)
+        {
+            float fxs, fys, fxe, fye;
+            fxs = lerp(0, beam.length, invlerp(beam_bound.x, beam_bound.x+beam_bound.w, *xs));
+            fxe = lerp(0, beam.length, invlerp(beam_bound.x, beam_bound.x+beam_bound.w, *xe));
+
+            float ys_abs, ye_abs;
+            ys_abs = beam_bound.y + beam_bound.h/2 - *ys;
+            ye_abs = beam_bound.y + beam_bound.h/2 - *ye;
+            fys = px_to_force(ys_abs, beam_bound);
+            fye = px_to_force(ye_abs, beam_bound);
+
+            SompDistrForce df = {
+                .start = fxs,
+                .end   = fxe,
             };
-            if (mouse_button & SDL_BUTTON_LEFT && mouse_pressed)
-            {
-                *dx_start = x_start; //beam_rect.x + ((x_start-beam_rect.x)/beam_rect.w)*beam_rect.w;
-                *dy_start = mouse_y;
-                state->distributed_first_placed = true;
-            }
-        } else
-        {
-            SDL_SetRenderDrawColor(sdl_renderer, COLOR_GRAY);
-            int x_start = *dx_start;
-            int x_end = MAX(beam_rect.x, MIN(mouse_x, beam_rect.x + beam_rect.w));
-            int y_start = *dy_start;
-            int y_end = mouse_y;
-            if (x_end < x_start) {
-                int t = x_end; x_end = x_start; x_start = t;
-                    t = y_end; y_end = y_start; y_start = t;
-            };
-            // Render distributed preview
-            for (float x = x_start; x <= x_end; x += DISTRIB_VIEW_STEP)
-            {
-                float t = (x-x_start)/(x_end-x_start);
-                int y = y_start + t*(y_end - y_start);
-                SDL_RenderLine(sdl_renderer, x, y, x, beam_rect.y);
-            }
-            if (mouse_released)
-            {
-                *dx_end = x_end;//beam_rect.x + ((x_start-beam_rect.x)/beam_rect.w)*state->beam.length;
-                *dy_end = y_end;//beam_rect.y - mouse_y;
-                float fs_x = lerp(0, state->beam.length, (x_start-beam_rect.x)/beam_rect.w);
-                float fs_y = beam_rect.y - y_start; //TODO: normalize for forces
-                float fe_x = lerp(0, state->beam.length, (x_end-beam_rect.x)/beam_rect.w);
-                float fe_y = beam_rect.y - y_end; //TODO: normalize for forces
+            float m, c;
+            line_from_points(&m, &c, fxs, fys, fxe, fye);
 
-                printf("%f %f\n", fs_y, fe_y);
+            df.polynomial[0] = c;
+            df.polynomial[1] = m;
 
-                // y = mx + c
-                float m, c;
-                line_from_points(&m, &c, fs_x, fs_y, fe_x, fe_y);
+            DynamicArrayAppend(distr_forces, df);
+            S->distributed_first_placed = false;
+            S->mode = NORMAL;
 
-                DynamicArrayAppend(&state->distrib_forces,
-                        ((DistributedForce){ .start=fs_x, .end=fe_x, .polynomial={c,m}})
-                        );
-                ObjectRender r = { COLOR_DEFAULT, 1 };
-                DynamicArrayAppend(&state->distrib_renders, r);
-
-                printStructArray(state->distrib_forces.items, state->distrib_forces.count, sizeof(DistributedForce), printDF);
-
-                state->mode = NORMAL;
-            }
-        };
-    }; break;
-    case MOD_POINT_FORCE: {
-        float mouse_x, mouse_y;
-        int mouse_button = SDL_GetMouseState(&mouse_x, &mouse_y);
-        (void)mouse_button;
-
-        SDL_SetRenderDrawColor(sdl_renderer, COLOR_RED);
-        int x = MAX(beam_rect.x, MIN(mouse_x, beam_rect.x + beam_rect.w));
-        ejsdl_render_arrow_vert(sdl_renderer, x, 0.1*sdl_window_height, beam_rect.y);
-
-        float d = ((x-beam_rect.x)/beam_rect.w)*state->beam.length;
-        float f = 1.0;
-        state->mod_point->distance = d;
-        state->mod_point->force = f;
-        if (mouse_released)
-        {
-            state->mode = NORMAL;
-        }
-        SDL_SetRenderDrawColor(sdl_renderer, COLOR_DEFAULT);
-    }; break;
-    case MOD_DISTRIBUTED_START: {
-        float mouse_x, mouse_y;
-        int mouse_button = SDL_GetMouseState(&mouse_x, &mouse_y);
-        (void)mouse_button;
-
-        SDL_SetRenderDrawColor(sdl_renderer, COLOR_RED);
-
-        int x_start = MAX(beam_rect.x, MIN(mouse_x, beam_rect.x + beam_rect.w));
-        int y_start = mouse_y;
-        SDL_RenderLine(sdl_renderer, x_start, y_start, x_start, beam_rect.y);
-
-        float m;
-        float c;
-        float fs_x = lerp(0, state->beam.length, (x_start-beam_rect.x)/beam_rect.w);
-        float fs_y = beam_rect.y - y_start;
-        float fe_x = state->mod_distrib->end;
-        float fe_y = evalPolynomial(fe_x, state->mod_distrib->polynomial);
-
-        if (fs_x >= fe_x)
-        {
-            state->mod_distrib->start = state->mod_distrib->end;
-            state->mode = MOD_DISTRIBUTED_END;
-            printf("Switch to MOD_DISTRIBUTED_END\n");
-            break;
+            somp_loginfo(SDL_LOG_CATEGORY_APPLICATION, "Distributed force added\n");
         }
 
-        // We don't want funky things with divide by infinties;
-        if (nearly_equal(fs_x, fe_x)) break;
-        // Reset polynomial
-        for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
-        {
-            state->mod_distrib->polynomial[i] = 0;
-        }
-
-        line_from_points(&m, &c, fs_x, fs_y, fe_x, fe_y);
-        state->mod_distrib->polynomial[0] = c;
-        state->mod_distrib->polynomial[1] = m;
-
-        state->mod_distrib->start = fs_x;
-
-        if (mouse_released)
-        {
-            state->mode = NORMAL;
-        }
-    }; break;
-    case MOD_DISTRIBUTED_END: {
-        float mouse_x, mouse_y;
-        int mouse_button = SDL_GetMouseState(&mouse_x, &mouse_y);
-        (void)mouse_button;
-
-        SDL_SetRenderDrawColor(sdl_renderer, COLOR_RED);
-        int x_end = MAX(beam_rect.x, MIN(mouse_x, beam_rect.x + beam_rect.w));
-        int y_end = mouse_y;
-        SDL_RenderLine(sdl_renderer, x_end, y_end, x_end, beam_rect.y);
-
-        float m = 0;
-        float c = 0;
-
-        float fe_x = lerp(0, state->beam.length, (x_end-beam_rect.x)/beam_rect.w);
-        float fe_y = beam_rect.y - y_end;
-
-        float fs_x = state->mod_distrib->start;
-        float fs_y = evalPolynomial(fs_x, state->mod_distrib->polynomial);
-
-        if (fs_x > fe_x)
-        {
-            state->mod_distrib->end = state->mod_distrib->start;
-            state->mode = MOD_DISTRIBUTED_START;
-            printf("Switch to MOD_DISTRIBUTED_START\n");
-            break;
-        }
-
-        if (nearly_equal(fs_x, fe_x)) break;
-
-        // Reset polynomial
-        for (int i = 0; i < MAX_POLYNOMIAL_DEGREE; i++)
-        {
-            state->mod_distrib->polynomial[i] = 0;
-        }
-
-        line_from_points(&m, &c, fs_x, fs_y, fe_x, fe_y);
-        state->mod_distrib->polynomial[0] = c;
-        state->mod_distrib->polynomial[1] = m;
-
-        state->mod_distrib->end = fe_x;
-
-        if (mouse_released)
-        {
-            state->mode = NORMAL;
-        }
-    }; break;
-    default: {
-        printf("Unfinished mode: %d, entering NORMAL\n", state->mode);
-        state->mode = NORMAL;
-        break;
-    }
     }
 
-    // ========================= SOLVE SECTION END ========================
+    render_phony_distr_force(beam_bound, *xs, *ys, *xe, *ye, EJSDL_COLOR(COLOR_PREVIEW));
+    return true;
+}
+bool mod_point_force(SompBoundary beam_bound, SompBeam beam, SompPointForce * new_force)
+{
+    float new_force_x = MIN(beam_bound.x+beam_bound.w, MAX(beam_bound.x, gui.mouse_x));
+    float new_force_y = gui.mouse_y;
 
-    SDL_RenderPresent(sdl_renderer);
+    new_force->force    = px_to_force(new_force_y, beam_bound);
+    new_force->distance = mapf(new_force_x, beam_bound.x, beam_bound.x+beam_bound.w, 0, beam.length);
 
-    SDL_Delay(3);
+    if (gui.mouse_released)
+    {
+        somp_state->solve.mode = NORMAL;
+    };
 
-    mouse_pressed = false;
-    mouse_released = false;
+    return true;
+}
+// This function sets things up for mod_distr_force since there is the trouble
+// of the start and the end, we need to calculate whether we are modding the
+// start or the end
+void mod_distr_force_enter(const SompBoundary beam_bound, const SompBeam beam, SompDistrForce * distr_force)
+{
+    somp_section_solve_t * const S = &somp_state->solve;
+    float xs, xe;
+    float * x_select, * y_select;
+
+    xs = mapf(distr_force->start, 0, beam.length, beam_bound.x, beam_bound.x+beam_bound.w);
+    xe = mapf(distr_force->end  , 0, beam.length, beam_bound.x, beam_bound.x+beam_bound.w);
+
+    float start_dist = fabsf(xs - gui.mouse_x);
+    float end_dist   = fabsf(xe - gui.mouse_x);
+
+    x_select = &S->temp_floats[0];
+    y_select = &S->temp_floats[1];
+
+    if (start_dist <= end_dist)
+    {
+        *x_select = xe;
+        *y_select = force_to_px(evalPolynomial(distr_force->end, distr_force->polynomial), beam_bound);
+    } else
+    {
+        *x_select = xs;
+        *y_select = force_to_px(evalPolynomial(distr_force->start, distr_force->polynomial), beam_bound);
+    }
+
+
+    S->mode = MOD_DISTR_FORCE;
+    S->mod_distr_force = distr_force;
+};
+bool mod_distr_force(const SompBoundary beam_bound, const SompBeam beam, SompDistrForce * distr_force)
+{
+    somp_section_solve_t * const S = &somp_state->solve;
+    float * xs, * ys;
+    float * xe, * ye;
+
+    // Order important here since they relate to the enter function
+    xs = &S->temp_floats[0];
+    ys = &S->temp_floats[1];
+
+    xe = &S->temp_floats[2];
+    ye = &S->temp_floats[3];
+
+    *xe = maxf(beam_bound.x, minf(beam_bound.x + beam_bound.w, gui.mouse_x));
+    *ye = gui.mouse_y;
+
+    if (*xe <= *xs) {
+        swap(xs, xe, float *);
+        swap(ys, ye, float *);
+    };
+
+    float fxs, fys, fxe, fye;
+
+    fxs = mapf(*xs, beam_bound.x, beam_bound.x+beam_bound.w, 0, beam.length);
+    fys = px_to_force(*ys, beam_bound);
+    fxe = mapf(*xe, beam_bound.x, beam_bound.x+beam_bound.w, 0, beam.length);
+    fye = px_to_force(*ye, beam_bound);
+
+    // y = mx + c
+    float m, c;
+    line_from_points(&m, &c, fxs, fys, fxe, fye);
+
+    distr_force->start = fxs;
+    distr_force->end   = fxe;
+    distr_force->polynomial[0] = c;
+    distr_force->polynomial[1] = m;
+
+    if (gui.mouse_released)
+    {
+        S->mode = NORMAL;
+    }
+
     return true;
 }
 
+bool somp_section_solve(SompBoundary boundary)
+{
+    somp_section_solve_t * state = &somp_state->solve;
 
+    SDL_Color background_color = EJSDL_COLOR(COLOR_HIBB_BEAM);
+    clear_background(boundary, background_color);
+
+    SompBoundary beam_boundary = { 0.1*gui.windoww, 0.1*gui.windowh, 0.8*gui.windoww, 0.8*gui.windowh };
+    SompBeam * beam = &state->beam;
+    SompPointForces * point_forces = &state->point_forces;
+    SompDistrForces * distr_forces = &state->distr_forces;
+
+    render_beam(beam_boundary);
+    render_point_forces(beam_boundary, *beam, point_forces);
+    render_distr_forces(beam_boundary, *beam, distr_forces);
+
+    switch (state->mode) {
+    case NORMAL:                  normal(beam_boundary, point_forces, distr_forces); break;
+    case ADD_POINT_FORCE:         add_point_force(beam_boundary, *beam, point_forces); break;
+    case ADD_DISTRIB_FORCE:       add_distr_force(beam_boundary, *beam, distr_forces); break;
+    case MOD_POINT_FORCE:         mod_point_force(beam_boundary, *beam, state->mod_point_force); break;
+    case MOD_DISTR_FORCE:         mod_distr_force(beam_boundary, *beam, state->mod_distr_force); break;
+    default: {
+        somp_loginfo(SDL_LOG_CATEGORY_APPLICATION, "Unknown mode, switching to NORMAL\n");
+        state->mode = NORMAL;
+    }
+    };
+
+    SDL_RenderPresent(somp_state->renderer);
+    return true;
+}
+// ======================================================================
+bool somp_section_2(SompBoundary boundary) { (void)boundary; return true; }
+bool somp_section_3(SompBoundary boundary) { (void)boundary; return true;}
+
+void gui_init(SompGui * const gui)
+{
+    SDL_GetWindowSize(somp_state->window, &gui->windoww, &gui->windowh);
+    gui->mouse_state = SDL_GetMouseState(&gui->mouse_x, &gui->mouse_y);
+
+
+}
+void gui_update(SDL_Event e, SompGui * const gui)
+{
+    switch(e.type)
+    {
+    case SDL_EVENT_WINDOW_SHOWN:
+    case SDL_EVENT_WINDOW_RESIZED: {
+        int w,h;
+        SDL_GetWindowSize(somp_state->window, &w, &h);
+        gui->windoww = w;
+        gui->windowh = h;
+        break;
+    }
+    case SDL_EVENT_MOUSE_BUTTON_UP:
+        gui->mouse_state = SDL_GetMouseState(&gui->mouse_x, &gui->mouse_y);
+        gui->mouse_released = true;
+        gui->mouse_down = false;
+        break;
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        gui->mouse_state = SDL_GetMouseState(&gui->mouse_x, &gui->mouse_y);
+        gui->mouse_pressed = true;
+        gui->mouse_down = true;
+        break;
+    case SDL_EVENT_MOUSE_MOTION:
+        gui->mouse_state = SDL_GetMouseState(&gui->mouse_x, &gui->mouse_y);
+        break;
+    };
+};
+
+void gui_reset(SompGui * const gui)
+{
+    gui->mouse_pressed = false;
+    gui->mouse_released = false;
+}
+
+void keyboard_shortcuts(SDL_Event e)
+{
+    somp_section_solve_t * S = &somp_state->solve;
+    switch(e.key.key)
+    {
+    case SDLK_S: {
+        solveBeam(&S->beam,
+                S->point_forces.items, S->point_forces.count,
+                S->distr_forces.items, S->distr_forces.count);
+        printf("Beam: {\n");
+        printf("\t.length = %f\n", S->beam.length);
+        printf("\t.sections_count = %d\n", S->beam.sections_count);
+        printf("Raw: ");
+        printStructArray(S->beam.raws, S->beam.sections_count, sizeof(Section), printSection);
+        printf("shear: ");
+        printStructArray(S->beam.shears, S->beam.sections_count, sizeof(Section), printSection);
+        printf("moment: ");
+        printStructArray(S->beam.moments, S->beam.sections_count, sizeof(Section), printSection);
+        printf("}\n");
+    }; break;
+    case SDLK_F: {
+        S->mode = (S->mode == ADD_POINT_FORCE) ? NORMAL : ADD_POINT_FORCE;
+    }; break;
+    case SDLK_D: {
+        S->mode = (S->mode == ADD_DISTRIB_FORCE) ? NORMAL : ADD_DISTRIB_FORCE;
+        S->distributed_first_placed = false;
+    }; break;
+    case SDLK_R: {
+        S->point_forces.count = 0;
+        S->distr_forces.count = 0;
+    }; break;
+    }
+};
+
+// Main function that controls logic of application
+// Returns: true to continue looping
+//          false to exit application
+bool somp_main()
+{
+    SDL_Event sdl_event;
+    while (SDL_PollEvent(&sdl_event))
+    {
+        gui_update(sdl_event, &gui);
+        switch(sdl_event.type)
+        {
+        case SDL_EVENT_QUIT: return false;
+        case SDL_EVENT_KEY_DOWN: keyboard_shortcuts(sdl_event); break;
+        }
+    }
+    SompBoundary boundary_solve = { 0, 0, gui.windoww, gui.windowh };
+    SompBoundary boundary_2 = { 0, 0, 0, 0 };
+    SompBoundary boundary_3 = { 0, 0, 0, 0 };
+
+
+    if (!somp_section_solve(boundary_solve)) return false;
+    if (!somp_section_2(boundary_2)) return false;
+    if (!somp_section_3(boundary_3)) return false;
+
+    gui_reset(&gui);
+
+    SDL_Delay(32);
+    return true;
+}

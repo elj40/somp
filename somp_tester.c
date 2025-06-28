@@ -49,12 +49,44 @@ void testDoubleSameSolve();
 void testDoubleDiffSolve();
 
 void testLineFromPoints();
+#define TEST_BEGIN(name) void name() {\
+    bool R = true;\
+    const char * test_name = #name;
+#define TEST_END() ejtest_print_result(test_name, R); }
+TEST_BEGIN(testDynamicArrayRemoveShuffle)
+{
+    struct Ints {
+        int * items;
+        int count;
+        int capacity;
+    };
+
+    struct Ints I = {0};
+    DynamicArrayAppend(&I, 1);
+    DynamicArrayAppend(&I, 2);
+    DynamicArrayAppend(&I, 3);
+    DynamicArrayAppend(&I, 4);
+    DynamicArrayAppend(&I, 5);
+
+    DynamicArrayRemoveShuffle(&I, 0);
+
+    ejtest_expect_int(&R, I.count, 4);
+    ejtest_expect_int(&R, I.items[0], 5);
+    ejtest_expect_int(&R, I.items[I.count-1], 4);
+
+    DynamicArrayRemoveShuffle(&I, 2);
+
+    ejtest_expect_int(&R, I.count, 3);
+    ejtest_expect_int(&R, I.items[2], 4);
+    ejtest_expect_int(&R, I.items[I.count-1], 4);
+} TEST_END();
 int main()
 {
 	testFloatComparison();
 	testLinkedLists();
     testLineFromPoints();
     testShiftArray();
+    testDynamicArrayRemoveShuffle();
 	testSeperateSections();
 
 	testWallReactionForce();
@@ -77,10 +109,6 @@ int main()
     testDoubleDiffSolve();
     return 0;
 }
-#define TEST_BEGIN(name) void name() {\
-    bool R = true;\
-    const char * test_name = #name;
-#define TEST_END() ejtest_print_result(test_name, R); }
 TEST_BEGIN(testShiftArray)
 {
     int arr[] = {0,1,2,3,4,5};

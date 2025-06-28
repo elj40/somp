@@ -12,7 +12,7 @@
 #define ArrayCount(array) (sizeof(array)/sizeof(array[0])) // NOTE: this only works in same scope as when the array was made
 
 #include <assert.h>
-#define DEFAULT_DA_CAPACITY 5
+#define DEFAULT_DA_CAPACITY 8
 #define DynamicArrayAppend(da, item) \
     do { \
         if ((da)->count >= (da)->capacity) \
@@ -26,11 +26,18 @@
         (da)->count++; \
     } while(0); 
 
+#define DynamicArrayRemoveShuffle(da, i) do { \
+    assert((i) < (da)->count); \
+    (da)->items[i] = (da)->items[(da)->count-1]; \
+    (da)->count--; \
+} while (0)
+
 #define shift_array(arr, start, end) do { \
     for (int shift_array_index = start; shift_array_index < end; shift_array_index++) { \
         (arr)[shift_array_index] = (arr)[shift_array_index+1]; \
     } \
 } while (0); \
+
 
 #define MIN(a, b) ((a) < (b)) ? (a) : (b)
 #define MAX(a, b) ((a) > (b)) ? (a) : (b)

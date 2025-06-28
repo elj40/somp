@@ -41,6 +41,10 @@ typedef struct {
     bool mouse_released;
     bool mouse_down;
     SDL_MouseButtonFlags mouse_state;
+
+    // Keyboard
+    bool _should_update_keyboard;
+    const bool * keyboard;
 } SompGui;
 
 typedef enum {
@@ -125,8 +129,46 @@ SompState * somp_close()
 // ======================================================================
 // ====================== SOLVE SECTION =================================
 void mod_distr_force_enter(const SompBoundary beam_bound, const SompBeam beam, SompDistrForce * distr_force);
-
 #define swap(x,y,type) do { type t = (x); x = y; y = t; } while(0)
+
+bool remove_point_force(SompPointForces * pfs, SompPointForce * pf)
+{
+    if (pf < pfs->items || pf > pfs->items+pfs->count-1)
+    {
+        somp_loginfo(SDL_LOG_CATEGORY_APPLICATION, "ERROR: pointer to pf not in range of dynamic array.\n");
+        return false;
+    }
+
+    int index = pf - pfs->items;
+    if (index < 0 || index >= pfs->count)
+    {
+        somp_loginfo(SDL_LOG_CATEGORY_APPLICATION, "ERROR: pointer to pf not in range of dynamic array.\n");
+        return false;
+    }
+
+    DynamicArrayRemoveShuffle(pfs, index);
+
+    return true;
+}
+bool remove_distr_force(SompDistrForces * dfs, SompDistrForce * df)
+{
+    if (df < dfs->items || df > dfs->items+dfs->count-1)
+    {
+        somp_loginfo(SDL_LOG_CATEGORY_APPLICATION, "ERROR: pointer to pf not in range of dynamic array.\n");
+        return false;
+    }
+
+    int index = df - dfs->items;
+    if (index < 0 || index >= dfs->count)
+    {
+        somp_loginfo(SDL_LOG_CATEGORY_APPLICATION, "ERROR: pointer to pf not in range of dynamic array.\n");
+        return false;
+    }
+
+    DynamicArrayRemoveShuffle(dfs, index);
+
+    return true;
+}
 float px_to_force(float y, SompBoundary bound)
 {
     // For now we assume that the beam or axis we care about is exaclty in the middle of the boundary
@@ -213,11 +255,15 @@ void render_point_force(SompBoundary beam_bound, SompBeam beam, SompPointForce *
     };
     if (hover(hover_rect))
     {
-        SDL_SetRenderDrawColor(somp_state->renderer, COLOR_HIGHLIGHT);
-        if (gui.mouse_pressed && gui.mouse_state == SDL_BUTTON_LEFT && S->mode == NORMAL)
+        if (S->mode == NORMAL)
         {
-            S->mode = MOD_POINT_FORCE;
-            S->mod_point_force = pf;
+            SDL_SetRenderDrawColor(somp_state->renderer, COLOR_HIGHLIGHT);
+            if (gui.mouse_pressed && gui.mouse_state == SDL_BUTTON_LEFT)
+            {
+                S->mode = MOD_POINT_FORCE;
+                S->mod_point_force = pf;
+            }
+            if (gui.keyboard[SDL_SCANCODE_X]) remove_point_force(&S->point_forces, pf);
         }
     } else
     {
@@ -234,7 +280,8 @@ void render_point_force(SompBoundary beam_bound, SompBeam beam, SompPointForce *
 
 void render_point_forces(const SompBoundary beam_bound, const SompBeam beam, const SompPointForces * point_forces)
 {
-    for (int i = 0; i < point_forces->count; i++)
+    // loop backwards to prevent flickering when removing
+    for (int i = point_forces->count-1; i >= 0; i--)
     {
         render_point_force(beam_bound, beam, &point_forces->items[i], EJSDL_COLOR(COLOR_DEFAULT));
     };
@@ -298,14 +345,21 @@ void distr_side(SDL_FRect hover_rect,
         const SompBoundary beam_bound, const SompBeam beam, SompDistrForce * df,
         SDL_Color default_color, SDL_Color hl_color)
 {
+    somp_section_solve_t * S = &somp_state->solve;
     SDL_Color * color = &default_color;
+
     if (hover(hover_rect)) {
-        color = &hl_color;
-        if (gui.mouse_pressed && gui.mouse_state == SDL_BUTTON_LEFT && somp_state->solve.mode == NORMAL) {
-            mod_distr_force_enter(beam_bound, beam, df);
+        if (S->mode == NORMAL)
+        {
+            color = &hl_color;
+            if (gui.mouse_pressed && gui.mouse_state == SDL_BUTTON_LEFT) {
+                mod_distr_force_enter(beam_bound, beam, df);
+            }
+            if (gui.keyboard[SDL_SCANCODE_X]) remove_distr_force(&S->distr_forces, df);
         }
     }
     else color = &default_color;
+
     SDL_SetRenderDrawColor(somp_state->renderer, EXPAND_COLOR(*color));
 
 }
@@ -367,7 +421,8 @@ void render_distr_force(const SompBoundary beam_bound, const SompBeam beam, Somp
 }
 void render_distr_forces(const SompBoundary beam_bound, const SompBeam beam, const SompDistrForces * distr_forces)
 {
-    for (int i = 0; i < distr_forces->count; i++)
+    // loop backwards to prevent flickering when removing
+    for (int i = distr_forces->count-1; i >= 0; i--)
     {
         render_distr_force(beam_bound, beam, &distr_forces->items[i], EJSDL_COLOR(COLOR_DEFAULT));
     };
@@ -639,6 +694,7 @@ void gui_reset(SompGui * const gui)
 {
     gui->mouse_pressed = false;
     gui->mouse_released = false;
+    gui->_should_update_keyboard = true;
 }
 
 void keyboard_shortcuts(SDL_Event e)
@@ -687,9 +743,14 @@ bool somp_main()
         switch(sdl_event.type)
         {
         case SDL_EVENT_QUIT: return false;
-        case SDL_EVENT_KEY_DOWN: keyboard_shortcuts(sdl_event); break;
+        case SDL_EVENT_KEY_DOWN:
+                             gui._should_update_keyboard = true;
+                             keyboard_shortcuts(sdl_event);
+                             break;
         }
     }
+    if (gui._should_update_keyboard) gui.keyboard = SDL_GetKeyboardState(NULL);
+
     SompBoundary boundary_solve = { 0, 0, gui.windoww, gui.windowh };
     SompBoundary boundary_2 = { 0, 0, 0, 0 };
     SompBoundary boundary_3 = { 0, 0, 0, 0 };

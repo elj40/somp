@@ -48,6 +48,19 @@ typedef struct {
 } SompGui;
 
 typedef enum {
+    TOP_LEFT = 0,
+    TOP_CENTRE,
+    TOP_RIGHT,
+
+    MID_LEFT,
+    MID_CENTRE,
+    MID_RIGHT,
+
+    BOT_LEFT,
+    BOT_CENTRE,
+    BOT_RIGHT,
+} TextRenderAnchor;
+typedef enum {
     NORMAL,
     ADD_POINT_FORCE,
     ADD_DISTRIB_FORCE,
@@ -207,16 +220,43 @@ void render_arrow_vert(SDL_Renderer * sdl_renderer,
     SDL_RenderLine(sdl_renderer, x - head_width, y2 - arrow_head_length, x, y2);
 }
 void text(SDL_Renderer * sdl_renderer, const char * text, float x, float y,
-        SDL_Color color)
+        SDL_Color color, TextRenderAnchor anchor)
 {
     SDL_Surface * surface = TTF_RenderText_Solid(somp_state->font, text, 0, color);
     SDL_Texture * texture = SDL_CreateTextureFromSurface(sdl_renderer, surface);
 
-    const SDL_FRect dstrect = { x, y, texture->w, texture->h };
+    SDL_FRect dstrect = { x, y, texture->w, texture->h };
+
+    switch (anchor) {
+    case TOP_LEFT:   break;
+    case TOP_CENTRE: dstrect.x -= texture->w/2; break;
+    case TOP_RIGHT:  dstrect.x -= texture->w  ; break;
+
+    case MID_LEFT:   dstrect.y -= texture->h/2; break;
+    case MID_CENTRE: dstrect.y -= texture->h/2; dstrect.x -= texture->w/2;break;
+    case MID_RIGHT:  dstrect.y -= texture->h/2; dstrect.x -= texture->w  ;break;
+
+    case BOT_LEFT:   dstrect.y -= texture->h  ; break;
+    case BOT_CENTRE: dstrect.y -= texture->h  ; dstrect.x -= texture->w/2;break;
+    case BOT_RIGHT:  dstrect.y -= texture->h  ; dstrect.x -= texture->w  ;break;
+    }
 
     SDL_RenderTexture(sdl_renderer, texture, NULL, &dstrect);
     SDL_DestroySurface(surface);
     SDL_DestroyTexture(texture);
+};
+void force_text(SDL_Renderer * sdl_renderer, float force,
+        float x, float y, SompBoundary beam_bound)
+{
+    // TODO: magic numbers
+    char text_buf[32];
+    TTF_SetFontSize(somp_state->font, 14);
+    snprintf(text_buf, sizeof(text_buf), "%.1f", force);
+
+    TextRenderAnchor anchor = BOT_LEFT;
+    if (y > beam_bound.y+beam_bound.h/2) anchor = TOP_LEFT;
+
+    text(sdl_renderer, text_buf, x, y, EJSDL_COLOR(COLOR_BLACK), anchor);
 };
 void render_beam(SompBoundary beam_bound)
 {
@@ -242,10 +282,7 @@ void render_point_force(SompBoundary beam_bound, SompBeam beam, SompPointForce *
     int arrow_ys = (pf->force > 0) ? beam_bound.y : beam_bound.y+beam_bound.h; // 1.
     int arrow_ye = beam_bound.y + beam_bound.h/2 + ((pf->force > 0) ? 0 : 10);   // 2.
 
-    char buf[32];
-    snprintf(buf, 32, "%.1f", pf->force);
-    TTF_SetFontSize(somp_state->font, 14);
-    text(somp_state->renderer, buf, arrow_x, arrow_ys, EJSDL_COLOR(COLOR_BLACK));
+    force_text(somp_state->renderer, pf->force, arrow_x, arrow_ys, beam_bound);
 
     SDL_FRect hover_rect = {
         arrow_x - hl_distance,
@@ -264,6 +301,9 @@ void render_point_force(SompBoundary beam_bound, SompBeam beam, SompPointForce *
                 S->mod_point_force = pf;
             }
             if (gui.keyboard[SDL_SCANCODE_X]) remove_point_force(&S->point_forces, pf);
+        } else if (S->mode == ADD_POINT_FORCE)
+        {
+            SDL_SetRenderDrawColor(somp_state->renderer, COLOR_PREVIEW);
         }
     } else
     {
@@ -387,6 +427,10 @@ void render_distr_force(const SompBoundary beam_bound, const SompBeam beam, Somp
     distr_side(hover_rect, beam_bound, beam, df, color, EJSDL_COLOR(COLOR_HIGHLIGHT));
     SDL_RenderLine(somp_state->renderer, x_start, line_ys, x_start, line_ye);
 
+    force_text(somp_state->renderer,
+            evalPolynomial(df->start, df->polynomial),
+            x_start, line_ys, beam_bound);
+
     SDL_SetRenderDrawColor(somp_state->renderer, color.r, color.g, color.b, color.a);
 
     float xp = x_start, yp = line_ys;
@@ -417,6 +461,10 @@ void render_distr_force(const SompBoundary beam_bound, const SompBeam beam, Somp
     };
     distr_side(hover_rect, beam_bound, beam, df, color, EJSDL_COLOR(COLOR_HIGHLIGHT));
     SDL_RenderLine(somp_state->renderer, x_end, line_ys, x_end, line_ye);
+
+    force_text(somp_state->renderer,
+            evalPolynomial(df->end, df->polynomial),
+            x_end, line_ys, beam_bound);
 
 }
 void render_distr_forces(const SompBoundary beam_bound, const SompBeam beam, const SompDistrForces * distr_forces)
@@ -702,6 +750,7 @@ void keyboard_shortcuts(SDL_Event e)
     somp_section_solve_t * S = &somp_state->solve;
     switch(e.key.key)
     {
+    case SDLK_ESCAPE: S->mode = NORMAL; break;
     case SDLK_S: {
         solveBeam(&S->beam,
                 S->point_forces.items, S->point_forces.count,

@@ -45,6 +45,10 @@ typedef struct {
     // Keyboard
     bool _should_update_keyboard;
     const bool * keyboard;
+
+    // Temporary surfaces used for things like text
+    SDL_Surface * temp_surface;
+    SDL_Texture * temp_texture;
 } SompGui;
 
 typedef enum {
@@ -59,7 +63,7 @@ typedef enum {
     BOT_LEFT,
     BOT_CENTRE,
     BOT_RIGHT,
-} TextRenderAnchor;
+} RectAnchor;
 typedef enum {
     NORMAL,
     ADD_POINT_FORCE,
@@ -95,6 +99,7 @@ typedef struct {
     TTF_Font * font;
 
     somp_section_solve_t solve;
+
 } SompState;
 
 
@@ -219,44 +224,76 @@ void render_arrow_vert(SDL_Renderer * sdl_renderer,
     SDL_RenderLine(sdl_renderer, x + head_width, y2 - arrow_head_length, x, y2);
     SDL_RenderLine(sdl_renderer, x - head_width, y2 - arrow_head_length, x, y2);
 }
-void text(SDL_Renderer * sdl_renderer, const char * text, float x, float y,
-        SDL_Color color, TextRenderAnchor anchor)
+SDL_FRect anchor_rect(SDL_FRect r, RectAnchor a)
 {
-    SDL_Surface * surface = TTF_RenderText_Solid(somp_state->font, text, 0, color);
-    SDL_Texture * texture = SDL_CreateTextureFromSurface(sdl_renderer, surface);
+    SDL_FRect new = r;
 
-    SDL_FRect dstrect = { x, y, texture->w, texture->h };
-
-    switch (anchor) {
+    // Draw rect based on different anchors
+    switch (a) {
     case TOP_LEFT:   break;
-    case TOP_CENTRE: dstrect.x -= texture->w/2; break;
-    case TOP_RIGHT:  dstrect.x -= texture->w  ; break;
+    case TOP_CENTRE: new.x -= new.w/2; break;
+    case TOP_RIGHT:  new.x -= new.w  ; break;
 
-    case MID_LEFT:   dstrect.y -= texture->h/2; break;
-    case MID_CENTRE: dstrect.y -= texture->h/2; dstrect.x -= texture->w/2;break;
-    case MID_RIGHT:  dstrect.y -= texture->h/2; dstrect.x -= texture->w  ;break;
+    case MID_LEFT:   new.y -= new.h/2; break;
+    case MID_CENTRE: new.y -= new.h/2; new.x -= new.w/2;break;
+    case MID_RIGHT:  new.y -= new.h/2; new.x -= new.w  ;break;
 
-    case BOT_LEFT:   dstrect.y -= texture->h  ; break;
-    case BOT_CENTRE: dstrect.y -= texture->h  ; dstrect.x -= texture->w/2;break;
-    case BOT_RIGHT:  dstrect.y -= texture->h  ; dstrect.x -= texture->w  ;break;
+    case BOT_LEFT:   new.y -= new.h  ; break;
+    case BOT_CENTRE: new.y -= new.h  ; new.x -= new.w/2;break;
+    case BOT_RIGHT:  new.y -= new.h  ; new.x -= new.w  ;break;
     }
 
-    SDL_RenderTexture(sdl_renderer, texture, NULL, &dstrect);
-    SDL_DestroySurface(surface);
-    SDL_DestroyTexture(texture);
+    return new;
 };
-void force_text(SDL_Renderer * sdl_renderer, float force,
+SDL_Texture * get_text_texture(SDL_Renderer * sdl_renderer, const char * text, SDL_Color color)
+{
+    gui.temp_surface = TTF_RenderText_Solid(somp_state->font, text, 0, color);
+    gui.temp_texture = SDL_CreateTextureFromSurface(sdl_renderer, gui.temp_surface);
+
+    return gui.temp_texture;
+};
+SDL_Texture * text(SDL_Renderer * sdl_renderer, const char * text, float x, float y,
+        SDL_Color color, RectAnchor anchor)
+{
+    SDL_Texture * texture = get_text_texture(sdl_renderer, text, color);
+
+    SDL_FRect dstrect = { x, y, texture->w, texture->h };
+    dstrect = anchor_rect(dstrect, anchor);
+
+    SDL_RenderTexture(sdl_renderer, texture, NULL, &dstrect);
+    return texture;
+};
+SDL_Texture * force_text(SDL_Renderer * sdl_renderer, float force,
         float x, float y, SompBoundary beam_bound)
 {
     // TODO: magic numbers
     char text_buf[32];
     TTF_SetFontSize(somp_state->font, 14);
-    snprintf(text_buf, sizeof(text_buf), "%.1f", force);
+    snprintf(text_buf, sizeof(text_buf), "%.1fN", force);
 
-    TextRenderAnchor anchor = BOT_LEFT;
+    RectAnchor anchor = BOT_LEFT;
     if (y > beam_bound.y+beam_bound.h/2) anchor = TOP_LEFT;
 
-    text(sdl_renderer, text_buf, x, y, EJSDL_COLOR(COLOR_BLACK), anchor);
+    return text(sdl_renderer, text_buf, x, y, EJSDL_COLOR(COLOR_BLACK), anchor);
+};
+// This function renders the distance text, I really don't like it because it
+// is a weird way of doing it.
+// Oh well
+SDL_Texture * distance_text(SDL_Renderer * sdl_renderer, float distance, float x, float y, SDL_Texture * ft, SompBoundary beam_bound)
+{
+    // TODO: magic numbers
+    char text_buf[32];
+    TTF_SetFontSize(somp_state->font, 14);
+    snprintf(text_buf, sizeof(text_buf), "%.3fm", distance);
+
+    RectAnchor anchor = BOT_LEFT;
+    float new_y = y - ft->h;
+    if (y > beam_bound.y+beam_bound.h/2) {
+        anchor = TOP_LEFT;
+        new_y = y + ft->h;
+    }
+
+    return text(sdl_renderer, text_buf, x, new_y, EJSDL_COLOR(COLOR_BLACK), anchor);
 };
 void render_beam(SompBoundary beam_bound)
 {
@@ -282,7 +319,9 @@ void render_point_force(SompBoundary beam_bound, SompBeam beam, SompPointForce *
     int arrow_ys = (pf->force > 0) ? beam_bound.y : beam_bound.y+beam_bound.h; // 1.
     int arrow_ye = beam_bound.y + beam_bound.h/2 + ((pf->force > 0) ? 0 : 10);   // 2.
 
-    force_text(somp_state->renderer, pf->force, arrow_x, arrow_ys, beam_bound);
+    // TODO: magic number
+    SDL_Texture * force_texture = force_text(somp_state->renderer, pf->force, arrow_x, arrow_ys, beam_bound);
+    distance_text(somp_state->renderer, pf->distance, arrow_x, arrow_ys, force_texture, beam_bound);
 
     SDL_FRect hover_rect = {
         arrow_x - hl_distance,
@@ -427,9 +466,10 @@ void render_distr_force(const SompBoundary beam_bound, const SompBeam beam, Somp
     distr_side(hover_rect, beam_bound, beam, df, color, EJSDL_COLOR(COLOR_HIGHLIGHT));
     SDL_RenderLine(somp_state->renderer, x_start, line_ys, x_start, line_ye);
 
-    force_text(somp_state->renderer,
+    SDL_Texture * force_texture =force_text(somp_state->renderer,
             evalPolynomial(df->start, df->polynomial),
             x_start, line_ys, beam_bound);
+    distance_text(somp_state->renderer, df->start, x_start, line_ys, force_texture, beam_bound);
 
     SDL_SetRenderDrawColor(somp_state->renderer, color.r, color.g, color.b, color.a);
 
@@ -465,6 +505,7 @@ void render_distr_force(const SompBoundary beam_bound, const SompBeam beam, Somp
     force_text(somp_state->renderer,
             evalPolynomial(df->end, df->polynomial),
             x_end, line_ys, beam_bound);
+    distance_text(somp_state->renderer, df->end, x_end, line_ys, force_texture, beam_bound);
 
 }
 void render_distr_forces(const SompBoundary beam_bound, const SompBeam beam, const SompDistrForces * distr_forces)
@@ -743,6 +784,11 @@ void gui_reset(SompGui * const gui)
     gui->mouse_pressed = false;
     gui->mouse_released = false;
     gui->_should_update_keyboard = true;
+
+    if (gui->temp_surface != NULL) SDL_DestroySurface(gui->temp_surface);
+    if (gui->temp_texture != NULL) SDL_DestroyTexture(gui->temp_texture);
+    gui->temp_surface = NULL;
+    gui->temp_texture = NULL;
 }
 
 void keyboard_shortcuts(SDL_Event e)
